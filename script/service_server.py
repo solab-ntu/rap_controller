@@ -8,7 +8,7 @@ import sys
 
 def service_cb(req):
     print ("Returning " + str(req.a) +" + "+ str(req.a) +" = "+ str(req.a + req.b))
-    return (req.a + req.b)
+    return req.a + req.b
 
 def main(args):
     rospy.init_node('hello_service')
