@@ -120,8 +120,12 @@ class Navie_controller():
        
         # Pick a nearest error nagle 
         # TODO self.ref_ang = vc/wc, Overwrite angle
-        R = self.Vc / self.Wc
-        self.reg_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
+        try: 
+            R = self.Vc / self.Wc
+        except ZeroDivisionError:
+            self.reg_ang = 0
+        else:
+            self.reg_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
