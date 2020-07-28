@@ -123,7 +123,7 @@ class Navie_controller():
         try: 
             R = self.Vc / self.Wc
         except ZeroDivisionError:
-            R = float('inf')
+            R = 99999
             self.ref_ang = 0
         else:
             self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
@@ -134,7 +134,7 @@ class Navie_controller():
             self.V_leader = self.Vc
             self.W_leader = self.Wc + KP_crab*error_leader
         elif self.mode == "diff":
-            self.V_leader = self.Vc*cos(error_leader)
+            self.V_leader = (self.Vc + sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *cos(error_leader)
             if abs(error_leader) > 0.2617993877991494:
                 self.W_leader = KP_diff*error_leader
             else:
@@ -147,7 +147,7 @@ class Navie_controller():
             self.W_follower = self.Wc + KP_crab*error_follower
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
-            self.V_follower = -self.Vc*cos(error_follower)
+            self.V_follower = - ( self.Vc + sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *cos(error_follower)
             if abs(error_leader) > 0.2617993877991494:
                 self.W_follower = KP_diff*error_follower
             else:
