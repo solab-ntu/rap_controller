@@ -134,11 +134,11 @@ class Navie_controller():
             self.V_leader = self.Vc
             self.W_leader = self.Wc + KP_crab*error_leader
         elif self.mode == "diff":
-            self.V_leader = (self.Vc + sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *cos(error_leader)
+            self.V_leader = (self.Vc + sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs( cos(error_leader))
             if abs(error_leader) > 0.2617993877991494:
                 self.W_leader = KP_diff*error_leader
             else:
-                self.W_leader = self.Wc*cos(error_leader) + KP_diff*error_leader
+                self.W_leader = self.Wc*abs(cos(error_leader)) + KP_diff*error_leader
 
         # Follower
         if self.mode == "crab":
