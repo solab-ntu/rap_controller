@@ -133,7 +133,10 @@ class Navie_controller():
             self.W_leader = self.Wc + KP_crab*error_leader
         elif self.mode == "diff":
             self.V_leader = self.Vc*cos(error_leader)
-            self.W_leader = self.Wc*cos(error_leader) + KP_diff*error_leader
+            if abs(error_leader) > 0.2617993877991494:
+                self.W_leader = KP_diff*error_leader
+            else:
+                self.W_leader = self.Wc*cos(error_leader) + KP_diff*error_leader
 
         # Follower
         if self.mode == "crab":
@@ -143,7 +146,10 @@ class Navie_controller():
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
             self.V_follower = -self.Vc*cos(error_follower)
-            self.W_follower =  self.Wc*cos(error_follower) + KP_diff*error_follower
+            if abs(error_leader) > 0.2617993877991494:
+                self.W_follower = KP_diff*error_follower
+            else:
+                self.W_follower =  self.Wc*cos(error_follower) + KP_diff*error_follower
         
         # Saturation velocity, for safty
         self.V_leader = self.saturation(self.V_leader, V_MAX)
