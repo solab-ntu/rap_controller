@@ -191,6 +191,7 @@ if __name__=="__main__":
                 #print("publihsed: vx: {0}, wz: {1}".format(twist.linear.x, twist.angular.z))
             if mode == "diff":
                 ref_ang += control_turn
+                '''
                 if ref_ang == 0.0:# go stairght
                     R = 0
                 else:
@@ -214,6 +215,14 @@ if __name__=="__main__":
                     twist.angular.x = normalize_angle(ref_ang)
                     twist.angular.y = 1 # Set mode to diff
                     twist.angular.z = control_speed
+                '''
+                twist = Twist()
+                twist.linear.x = control_speed
+                twist.linear.y = 0
+                twist.linear.z = 0
+                twist.angular.x = 0
+                twist.angular.y = 1 # Set mode to diff
+                twist.angular.z = control_turn
                 pub_cmd_car1.publish(twist)
                 pub_cmd_car2.publish(twist)
                 #print("loop: {0}".format(count))
