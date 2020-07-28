@@ -12,7 +12,7 @@ from math import atan2,acos,sqrt,pi,sin,cos,tan
 TOW_CAR_LENGTH = 0.93 # meter, Length between two cars
 V_MAX = 0.3 # m/s, Max velocity
 W_MAX = 0.6 # rad/s, MAX angular velocity
-KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase reg_ang
+KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
 
 class Navie_controller():
@@ -52,7 +52,7 @@ class Navie_controller():
                 float64 y
                 float64 z
             geometry_msgs/Vector3 angular
-                float64 x - reg_ang
+                float64 x - ref_ang
                 float64 y - mode, 1 means differtial mode, 0 means crab mode
                 float64 z
         '''
@@ -105,9 +105,9 @@ class Navie_controller():
             return
         
         # Execute cmd 
-        self.W_leader   = self.Wc
-        self.W_follower = self.Wc
-        self.V_leader   = self.Vc
+        #self.W_leader   = self.Wc
+        #self.W_follower = self.Wc
+        #self.V_leader   = self.Vc
         # self.V_follower = -self.Vc# Follower go backward
 
         # Get tf 
@@ -123,9 +123,11 @@ class Navie_controller():
         try: 
             R = self.Vc / self.Wc
         except ZeroDivisionError:
-            self.reg_ang = 0
+            R = float('inf')
+            self.ref_ang = 0
         else:
-            self.reg_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
+            self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
+        print (str(R))
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
@@ -160,6 +162,7 @@ class Navie_controller():
         # Debug print
         # rospy.loginfo("[naive controller] W_Leader = "+str(KP)+"*(" + str(self.ref_ang) + " - " + str(self.theta))
         if self.role == "leader":
+            rospy.loginfo("[naive controller] Error_leader: "+ str(error_leader)+", ref_ang: " + str(self.ref_ang) + ", theta:" + str(self.theta))
             rospy.loginfo("[naive controller] Leader: "+ str(error_leader)+" (" + str(self.V_leader) + ", " +str(self.W_leader) + ")")
         elif self.role == "follower":
             rospy.loginfo("[naive controller] Follower: "+ str(error_follower)+" (" + str(self.V_follower) + ", " +str(self.W_follower) + ")")
