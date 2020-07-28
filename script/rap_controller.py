@@ -108,7 +108,7 @@ class Navie_controller():
         self.W_leader   = self.Wc
         self.W_follower = self.Wc
         self.V_leader   = self.Vc
-        self.V_follower = -self.Vc# Follower go backward
+        # self.V_follower = -self.Vc# Follower go backward
 
         # Get tf 
         self.get_base_link()
@@ -119,15 +119,25 @@ class Navie_controller():
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
        
         # Pick a nearest error nagle 
+        # TODO self.ref_ang = vc/wc
+        # Leader
+        error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
-            self.W_leader += KP_crab*self.nearest_error(self.ref_ang - self.theta)
+            self.V_leader = self.Vc
+            self.W_leader = self.Wc + KP_crab*error_leader
         elif self.mode == "diff":
-            self.W_leader += KP_diff*self.nearest_error(self.ref_ang - self.theta)
-        
+            self.V_leader = self.Vc*cos(error_leader)
+            self.W_leader = self.Wc*cos(error_leader) + KP_diff*error_leader
+
+        # Follower
         if self.mode == "crab":
-            self.W_follower  += KP_crab*self.nearest_error(pi + self.ref_ang - self.theta)
+            error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
+            self.V_follower = -self.Vc
+            self.W_follower = self.Wc + KP_crab*error_follower
         elif self.mode == "diff":
-            self.W_follower  += KP_diff*self.nearest_error(pi - self.ref_ang - self.theta)
+            error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
+            self.V_follower = -self.Vc*cos(error_follower)
+            self.W_follower =  self.Wc*cos(error_follower) + KP_diff*error_follower
         
         # Saturation velocity, for safty
         self.V_leader = self.saturation(self.V_leader, V_MAX)

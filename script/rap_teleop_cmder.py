@@ -22,6 +22,7 @@ w/x : increase/decrease only linear speed by 10%
 e/c : increase/decrease only angular speed by 10%
 space key, k : force stop
 anything else : stop smoothly
+y : toggle mode, crab mode or differental mode
 
 CTRL-C to quit
 """
@@ -194,17 +195,25 @@ if __name__=="__main__":
                     R = 0
                 else:
                     R = TOW_CAR_LENGTH / (2*tan(ref_ang)) # rotation center radius
-                twist = Twist()
-                twist.linear.x = control_speed
-                twist.linear.y = 0
-                twist.linear.z = 0
-                twist.angular.x = normalize_angle(ref_ang)
-                twist.angular.y = 1 # Set mode to diff
-                if R == 0.0:
-                    twist.angular.z = 0
-                else:
-                    twist.angular.z = control_speed / R
-                
+                if abs(ref_ang) <= 1.047 :# smaller then 60 degree
+                    twist = Twist()
+                    twist.linear.x = control_speed
+                    twist.linear.y = 0
+                    twist.linear.z = 0
+                    twist.angular.x = normalize_angle(ref_ang)
+                    twist.angular.y = 1 # Set mode to diff
+                    if R == 0.0:
+                        twist.angular.z = 0
+                    else:
+                        twist.angular.z = control_speed / R
+                else: 
+                    twist = Twist()
+                    twist.linear.x = R * control_speed
+                    twist.linear.y = 0
+                    twist.linear.z = 0
+                    twist.angular.x = normalize_angle(ref_ang)
+                    twist.angular.y = 1 # Set mode to diff
+                    twist.angular.z = control_speed
                 pub_cmd_car1.publish(twist)
                 pub_cmd_car2.publish(twist)
                 #print("loop: {0}".format(count))
