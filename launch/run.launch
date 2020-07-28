@@ -9,6 +9,7 @@
         <param name="robot_name" value="car2"/>
         <param name="role" value="follower"/>
     </node>
+    <node pkg="rap_controller" type="rap_teleop_cmder.py" name="rap_teleop_cmder" output='screen'/>
 
     <!--node pkg="rviz" type="rviz" name="rviz" args="-d $(find ros_pkg_example)/rviz/default.rviz" if="$(arg use_rviz)" /-->
 </launch>
