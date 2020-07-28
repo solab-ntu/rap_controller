@@ -119,7 +119,9 @@ class Navie_controller():
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
        
         # Pick a nearest error nagle 
-        # TODO self.ref_ang = vc/wc
+        # TODO self.ref_ang = vc/wc, Overwrite angle
+        R = self.Vc / self.Wc
+        self.reg_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
@@ -148,9 +150,9 @@ class Navie_controller():
         # Debug print
         # rospy.loginfo("[naive controller] W_Leader = "+str(KP)+"*(" + str(self.ref_ang) + " - " + str(self.theta))
         if self.role == "leader":
-            rospy.loginfo("[naive controller] Leader: (" + str(self.V_leader) + ", " +str(self.W_leader) + ")")
+            rospy.loginfo("[naive controller] Leader: "+ str(self.reg_ang)+" (" + str(self.V_leader) + ", " +str(self.W_leader) + ")")
         elif self.role == "follower":
-            rospy.loginfo("[naive controller] Follower: (" + str(self.V_follower) + ", " +str(self.W_follower) + ")")
+            rospy.loginfo("[naive controller] Follower: "+ str(self.reg_ang)+" (" + str(self.V_follower) + ", " +str(self.W_follower) + ")")
         
         # Set publish flag
         self.is_need_publish = True
