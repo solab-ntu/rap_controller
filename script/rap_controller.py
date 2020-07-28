@@ -154,9 +154,9 @@ class Navie_controller():
         # Debug print
         # rospy.loginfo("[naive controller] W_Leader = "+str(KP)+"*(" + str(self.ref_ang) + " - " + str(self.theta))
         if self.role == "leader":
-            rospy.loginfo("[naive controller] Leader: "+ str(self.reg_ang)+" (" + str(self.V_leader) + ", " +str(self.W_leader) + ")")
+            rospy.loginfo("[naive controller] Leader: "+ str(self.error_leader)+" (" + str(self.V_leader) + ", " +str(self.W_leader) + ")")
         elif self.role == "follower":
-            rospy.loginfo("[naive controller] Follower: "+ str(self.reg_ang)+" (" + str(self.V_follower) + ", " +str(self.W_follower) + ")")
+            rospy.loginfo("[naive controller] Follower: "+ str(self.error_follower)+" (" + str(self.V_follower) + ", " +str(self.W_follower) + ")")
         
         # Set publish flag
         self.is_need_publish = True
