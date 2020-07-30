@@ -159,7 +159,7 @@ class Navie_controller():
             (self.V_leader, self.W_leader) = self.crab_controller(error_leader)
 
         elif self.mode == "diff":
-            (self.V_leader, self.W_leader) = self.diff_controller(self.Vc, self.Wc, R,error_leader):
+            (self.V_leader, self.W_leader) = self.diff_controller(self.Vc, self.Wc, R,error_leader)
             #self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs(cos(error_leader))
             #if abs(error_leader) > 0.2617993877991494:
             #    self.W_leader = KP_diff*error_leader
@@ -174,7 +174,7 @@ class Navie_controller():
             #self.W_follower = KP_crab*error_follower
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
-            (self.V_follower, self.W_follower) = self.diff_controller(self.Vc, self.Wc, R,error_follower):
+            (self.V_follower, self.W_follower) = self.diff_controller(self.Vc, self.Wc, R,error_follower)
             #self.V_follower = -( self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) * abs(cos(error_follower) )
             #if abs(error_leader) > 0.2617993877991494:
             #    self.W_follower = KP_diff*error_follower
