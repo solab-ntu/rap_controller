@@ -125,9 +125,10 @@ class Navie_controller():
             else:
                 self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
         elif self.mode == "crab":
-            print ("VY : " + str(self.Vy))
-            print ("Vc : " + str(self.Vc))
-            self.ref_ang = atan2(self.Vy, self.Vc)
+            if self.Vc > 0: # Go forward
+                self.ref_ang = atan2(self.Vy, self.Vc)
+            elif self.Vc < 0: # Go backward
+                self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
         
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
