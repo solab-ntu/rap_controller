@@ -39,6 +39,13 @@ def cb_joy(data):
             twist.linear.y = vy
             twist.angular.z = wz
             rospy.loginfo("Vx: %f; Vy: %f; W %f", twist.linear.x, twist.linear.y, twist.angular.z)
+            # Don't send -0.0
+            if twist.linear.x == 0.0:
+                twist.linear.x = 0.0
+            if twist.linear.y == 0.0:
+                twist.linear.y = 0.0
+            if twist.angular.z == 0.0:
+                twist.angular.z = 0.0
             PUB_CAR1.publish(twist)
             PUB_CAR2.publish(twist)
         VX_LAST = vx
@@ -56,7 +63,7 @@ if __name__ == '__main__':
     VY_LAST = 0.0
     WZ_LAST = 0.0
 
-    PUB_CAR1 = rospy.Publisher(name="/car1/cmd_vel", data_class=Twist, queue_size=1)
-    PUB_CAR2 = rospy.Publisher(name="/car2/cmd_vel", data_class=Twist, queue_size=1)
+    PUB_CAR1 = rospy.Publisher(name="/car1/naive_cmd", data_class=Twist, queue_size=1)
+    PUB_CAR2 = rospy.Publisher(name="/car2/naive_cmd", data_class=Twist, queue_size=1)
     rospy.Subscriber(name="joy", data_class=Joy, callback=cb_joy, queue_size=1)
     rospy.spin()
