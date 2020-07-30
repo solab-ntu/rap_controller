@@ -32,6 +32,7 @@ class Navie_controller():
         self.theta = None
         # Kinematics 
         self.Vc = None
+        self.Vy = None
         self.Wc = None
         self.ref_ang = None
         self.V_leader = None
@@ -57,6 +58,7 @@ class Navie_controller():
                 float64 z
         '''
         self.Vc = data.linear.x
+        self.Vy = data.linear.y
         self.Wc = data.angular.z
         self.ref_ang = data.angular.x
         if data.angular.y == 0:
@@ -100,15 +102,10 @@ class Navie_controller():
         '''
         # Do nothing if command is not set yet.
         if  self.Vc == None or\
+            self.Vy == None or\
             self.Wc == None or\
             self.ref_ang == None:
             return
-        
-        # Execute cmd 
-        #self.W_leader   = self.Wc
-        #self.W_follower = self.Wc
-        #self.V_leader   = self.Vc
-        # self.V_follower = -self.Vc# Follower go backward
 
         # Get tf 
         self.get_base_link()
@@ -118,21 +115,23 @@ class Navie_controller():
         #
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
        
-        # Pick a nearest error nagle 
-        # TODO self.ref_ang = vc/wc, Overwrite angle
-        try: 
-            R = self.Vc / self.Wc
-        except ZeroDivisionError:
-            R = 99999
-            self.ref_ang = 0
-        else:
-            self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
-        print (str(R))
+        # Pick a nearest error nagle
+        if self.mode == "diff":
+            try: 
+                R = self.Vc / self.Wc
+            except ZeroDivisionError:
+                R = 99999
+                self.ref_ang = 0
+            else:
+                self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
+        elif self.mode == "crab":
+            self.ref_ang = atan2(self.Vy, self.Vc)
+        
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
-            self.V_leader = self.Vc
-            self.W_leader = self.Wc + KP_crab*error_leader
+            self.V_leader = sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_leader))
+            self.W_leader = KP_crab*error_leader
         elif self.mode == "diff":
             self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs( cos(error_leader))
             if abs(error_leader) > 0.2617993877991494:
@@ -143,11 +142,11 @@ class Navie_controller():
         # Follower
         if self.mode == "crab":
             error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
-            self.V_follower = -self.Vc
-            self.W_follower = self.Wc + KP_crab*error_follower
+            self.V_follower = -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
+            self.W_follower = KP_crab*error_follower
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
-            self.V_follower = -( self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) * abs(cos(error_follower) ) # TODO NO sign?
+            self.V_follower = -( self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) * abs(cos(error_follower) )
             if abs(error_leader) > 0.2617993877991494:
                 self.W_follower = KP_diff*error_follower
             else:
