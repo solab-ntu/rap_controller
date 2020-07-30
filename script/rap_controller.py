@@ -151,7 +151,7 @@ class Navie_controller():
         # Follower
         if self.mode == "crab":
             error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
-            self.V_follower = -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
+            self.V_follower = self.sign(self.Vc) * -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
             self.W_follower = KP_crab*error_follower
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
