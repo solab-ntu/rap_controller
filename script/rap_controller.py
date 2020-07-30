@@ -156,7 +156,7 @@ class Navie_controller():
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
-            (self.V_leader, self.W_leader) = self.crab_controller(error_leader)
+            (self.V_leader, self.W_leader) = self.crab_controller(self.Vc, self.Vy, error_leader)
 
         elif self.mode == "diff":
             (self.V_leader, self.W_leader) = self.diff_controller(self.Vc, self.Wc, R,error_leader)
@@ -169,7 +169,7 @@ class Navie_controller():
         # Follower
         if self.mode == "crab":
             error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
-            (self.V_follower, self.W_follower) = self.crab_controller(error_follower)
+            (self.V_follower, self.W_follower) = self.crab_controller(self.Vc, self.Vy, error_follower)
             #self.V_follower = self.sign(self.Vc) * -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
             #self.W_follower = KP_crab*error_follower
         elif self.mode == "diff":
