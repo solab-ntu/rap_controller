@@ -100,8 +100,25 @@ class Navie_controller():
             return 1 
         if value < 0:
             return -1
-
-
+    def crab_controller(self,vx,vy,error):
+        '''
+        Return leader crab controller result
+        '''
+        v = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
+        w = KP_crab*error
+        return (v,w)
+    
+    def diff_controller(self,vx,w,R,error):
+        '''
+        Return leader crab controller result
+        '''
+        v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
+        if abs(error) > 0.2617993877991494:
+            w_out = KP_diff*error
+        else:
+            w_out = w*abs(cos(error)) + KP_diff*error
+        return (v_out,w_out)
+    
     def iterate_once(self):
         '''
         call by main loop, execute every loop.
@@ -121,7 +138,7 @@ class Navie_controller():
         #
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
        
-        # Pick a nearest error nagle
+        # Get refenrence angle
         if self.mode == "diff":
             try: 
                 R = self.Vc / self.Wc
@@ -139,28 +156,32 @@ class Navie_controller():
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
-            self.V_leader = self.sign(self.Vc) * sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_leader))
-            self.W_leader = KP_crab*error_leader
+            (self.V_leader, self.W_leader) = self.crab_controller(error_leader)
+
         elif self.mode == "diff":
-            self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs(cos(error_leader))
-            if abs(error_leader) > 0.2617993877991494:
-                self.W_leader = KP_diff*error_leader
-            else:
-                self.W_leader = self.Wc*abs(cos(error_leader)) + KP_diff*error_leader
+            (self.V_leader, self.W_leader) = self.diff_controller(self.Vc, self.Wc, R,error_leader):
+            #self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs(cos(error_leader))
+            #if abs(error_leader) > 0.2617993877991494:
+            #    self.W_leader = KP_diff*error_leader
+            #else:
+            #    self.W_leader = self.Wc*abs(cos(error_leader)) + KP_diff*error_leader
 
         # Follower
         if self.mode == "crab":
             error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
-            self.V_follower = self.sign(self.Vc) * -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
-            self.W_follower = KP_crab*error_follower
+            (self.V_follower, self.W_follower) = self.crab_controller(error_follower)
+            #self.V_follower = self.sign(self.Vc) * -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
+            #self.W_follower = KP_crab*error_follower
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
-            self.V_follower = -( self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) * abs(cos(error_follower) )
-            if abs(error_leader) > 0.2617993877991494:
-                self.W_follower = KP_diff*error_follower
-            else:
-                self.W_follower =  self.Wc*abs( cos(error_follower)) + KP_diff*error_follower
+            (self.V_follower, self.W_follower) = self.diff_controller(self.Vc, self.Wc, R,error_follower):
+            #self.V_follower = -( self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) * abs(cos(error_follower) )
+            #if abs(error_leader) > 0.2617993877991494:
+            #    self.W_follower = KP_diff*error_follower
+            #else:
+            #    self.W_follower =  self.Wc*abs( cos(error_follower)) + KP_diff*error_follower
         
+        self.V_follower *= -1.0
         # Saturation velocity, for safty
         self.V_leader = self.saturation(self.V_leader, V_MAX)
         self.W_leader = self.saturation(self.W_leader, W_MAX)
