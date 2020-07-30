@@ -125,6 +125,8 @@ class Navie_controller():
             else:
                 self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
         elif self.mode == "crab":
+            print ("VY : " + str(self.Vy))
+            print ("Vc : " + str(self.Vc))
             self.ref_ang = atan2(self.Vy, self.Vc)
         
         # Leader
@@ -133,7 +135,7 @@ class Navie_controller():
             self.V_leader = sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_leader))
             self.W_leader = KP_crab*error_leader
         elif self.mode == "diff":
-            self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs( cos(error_leader))
+            self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs(cos(error_leader))
             if abs(error_leader) > 0.2617993877991494:
                 self.W_leader = KP_diff*error_leader
             else:
