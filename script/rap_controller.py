@@ -14,6 +14,9 @@ V_MAX = 0.3 # m/s, Max velocity
 W_MAX = 0.6 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
+DT = 0.1 # sec
+
+# variable 
 
 class Navie_controller():
     def __init__(self,robot_name, role):
@@ -42,6 +45,9 @@ class Navie_controller():
         # Flags
         self.mode = "crab" # "diff"
         self.is_need_publish = False
+        # PID
+        self.cmd_last = 0
+        self.error_last = 0 
     
     def cmd_cb(self,data):
         '''
@@ -100,12 +106,22 @@ class Navie_controller():
             return 1 
         if value < 0:
             return -1
+
+    def pi_controller(self, kp, ki,error):
+        '''
+        '''
+        cmd = self.cmd_last + error*kp + (kp-ki*DT)*self.error_last
+        self.cmd_last = cmd
+        self.error_last = error
+        return cmd
+    
     def crab_controller(self,vx,vy,error):
         '''
         Return leader crab controller result
         '''
         v = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
         w = KP_crab*error
+        # w = self.pi_controller(KP_crab, 0.001, error)
         return (v,w)
     
     def diff_controller(self,vx,w,R,error):
@@ -115,7 +131,9 @@ class Navie_controller():
         v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
         if abs(error) > 0.2617993877991494:
             w_out = KP_diff*error
+            # w = self.pi_controller(KP_diff, 0.001, error)
         else:
+            # w = w*abs(cos(error)) + self.pi_controller(KP_diff, 0.001, error)
             w_out = w*abs(cos(error)) + KP_diff*error
         return (v_out,w_out)
     

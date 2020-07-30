@@ -23,6 +23,15 @@ def cb_joy(data):
         global WZ_MAX
         WZ_MAX = abs(WZ_MAX*(data.axes[4] + 0.1))  # increase turn by 10%
         rospy.loginfo("current max angular speed: %f", WZ_MAX)
+    elif data.buttons[1] == 1.0:
+        global MODE
+        if MODE == "crab":
+            rospy.loginfo("Switch to diff mode")
+            MODE = "diff"
+        elif MODE == "diff":
+            rospy.loginfo("Switch to crab mode")
+            MODE = "crab"
+
     else:
         global VX_LAST
         global VY_LAST
@@ -38,6 +47,10 @@ def cb_joy(data):
             twist.linear.x = vx
             twist.linear.y = vy
             twist.angular.z = wz
+            if MODE == "crab":
+                twist.angular.y = 0.0
+            elif MODE == "diff":
+                twist.angular.y = 1.0
             rospy.loginfo("Vx: %f; Vy: %f; W %f", twist.linear.x, twist.linear.y, twist.angular.z)
             # Don't send -0.0
             if twist.linear.x == 0.0:
@@ -62,6 +75,8 @@ if __name__ == '__main__':
     VX_LAST = 0.0
     VY_LAST = 0.0
     WZ_LAST = 0.0
+    MODE = "crab"
+    rospy.loginfo("Switch to CRAB MODE")
 
     PUB_CAR1 = rospy.Publisher(name="/car1/naive_cmd", data_class=Twist, queue_size=1)
     PUB_CAR2 = rospy.Publisher(name="/car2/naive_cmd", data_class=Twist, queue_size=1)
