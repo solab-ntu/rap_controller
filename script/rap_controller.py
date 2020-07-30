@@ -95,6 +95,12 @@ class Navie_controller():
         elif error < -pi:
             error += 2*pi
         return error
+    def sign(self, value):
+        if value >= 0: 
+            return 1 
+        if value < 0:
+            return -1
+
 
     def iterate_once(self):
         '''
@@ -133,7 +139,7 @@ class Navie_controller():
         # Leader
         error_leader = self.nearest_error(self.ref_ang - self.theta)
         if self.mode == "crab":
-            self.V_leader = sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_leader))
+            self.V_leader = self.sign(self.Vc) * sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_leader))
             self.W_leader = KP_crab*error_leader
         elif self.mode == "diff":
             self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs(cos(error_leader))
