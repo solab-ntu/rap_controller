@@ -131,7 +131,7 @@ class Navie_controller():
             else:
                 self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
         elif self.mode == "crab":
-            if self.Vc > 0: # Go forward
+            if self.Vc >= 0: # Go forward
                 self.ref_ang = atan2(self.Vy, self.Vc)
             elif self.Vc < 0: # Go backward
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
