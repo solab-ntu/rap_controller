@@ -165,6 +165,7 @@ class Navie_controller():
                 return
             self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
         else:
+            self.sim_get_base_link()
             self.sim_get_big_car()
             if self.base_link_xyt == None or self.big_car_xyt == None : # Not get the theta call back yet
                 return
@@ -192,26 +193,16 @@ class Navie_controller():
 
         elif self.mode == "diff":
             (self.V_leader, self.W_leader) = self.diff_controller(self.Vc, self.Wc, R,error_leader)
-            #self.V_leader = (self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) *abs(cos(error_leader))
-            #if abs(error_leader) > 0.2617993877991494:
-            #    self.W_leader = KP_diff*error_leader
-            #else:
-            #    self.W_leader = self.Wc*abs(cos(error_leader)) + KP_diff*error_leader
 
         # Follower
         if self.mode == "crab":
             error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
-            (self.V_follower, self.W_follower) = self.crab_controller(self.Vc, self.Vy, error_follower)
-            #self.V_follower = self.sign(self.Vc) * -sqrt(self.Vc**2 + self.Vy**2) * abs(cos(error_follower))
-            #self.W_follower = KP_crab*error_follower
+            (self.V_follower, self.W_follower) =\
+                self.crab_controller(self.Vc, self.Vy, error_follower)
         elif self.mode == "diff":
             error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
-            (self.V_follower, self.W_follower) = self.diff_controller(self.Vc, self.Wc, R,error_follower)
-            #self.V_follower = -( self.Vc - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*self.Wc) * abs(cos(error_follower) )
-            #if abs(error_leader) > 0.2617993877991494:
-            #    self.W_follower = KP_diff*error_follower
-            #else:
-            #    self.W_follower =  self.Wc*abs( cos(error_follower)) + KP_diff*error_follower
+            (self.V_follower, self.W_follower) =\
+                self.diff_controller(self.Vc, self.Wc, R,error_follower)
         
         self.V_follower *= -1.0
         # Saturation velocity, for safty
@@ -301,12 +292,15 @@ class Navie_controller():
 
     def sim_get_big_car(self):
         '''
-        Get tf, odom_1 -> chassis_1 
+        Get tf, odom_1 -> chassis_1 : mobydick
+        Get tf, map -> base_link : pepelepew
         '''
         try:
-            t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
+            # t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
+            t = self.tfBuffer.lookup_transform("map", "base_link", rospy.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
+            # rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
+            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/base_link")
         else:
             quaternion = (
                 t.transform.rotation.x,
@@ -315,6 +309,27 @@ class Navie_controller():
                 t.transform.rotation.w)
             euler = tf.transformations.euler_from_quaternion(quaternion)
             self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
+
+
+    def sim_get_base_link(self):
+        '''
+        Get tf, map -> car1 : pepelepew
+        '''
+        try:
+            # t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
+            t = self.tfBuffer.lookup_transform("map", "car1", rospy.Time())
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            # rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
+            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/car1")
+        else:
+            quaternion = (
+                t.transform.rotation.x,
+                t.transform.rotation.y,
+                t.transform.rotation.z,
+                t.transform.rotation.w)
+            euler = tf.transformations.euler_from_quaternion(quaternion)
+            self.base_link_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
+    
 def main(args):
     rospy.init_node('rap_controller',anonymous=False)
     # Get global parameters
