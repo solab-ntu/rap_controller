@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="use_rviz" default="true" />
     <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car1" output='screen'>
         <param name="robot_name" value="car1"/>
         <param name="role" value="leader"/>
@@ -27,6 +26,7 @@
         <param name="switch_mode_button" value="1"/> 
         <param name="speed_axe" value="5"/>
         <param name="turn_axe" value="4"/>-->
+        
         <param name="vx_axe" value="4"/>
         <param name="vy_axe" value="3"/>
         <param name="wz_axe" value="0"/>

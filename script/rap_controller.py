@@ -5,7 +5,7 @@ import tf2_ros
 import tf # conversion euler
 from geometry_msgs.msg import Twist # topic /cmd_vel
 from math import atan2,acos,sqrt,pi,sin,cos,tan
-
+from std_msgs.msg import Float64
 #########################
 ### Global parameters ###
 #########################
@@ -19,14 +19,17 @@ DT = 0.1 # sec
 # variable 
 
 class Navie_controller():
-    def __init__(self,robot_name, role):
+    def __init__(self,robot_name, role, sim):
         # Subscriber
-        rospy.Subscriber("naive_cmd", Twist, self.cmd_cb)
+        rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
+        if sim:
+            rospy.Subscriber("/"+robot_name+"/"+"theta", Float64, self.sim_theta_cb)
         # Publisher
         self.pub_cmd_vel = rospy.Publisher("/"+robot_name+'/cmd_vel', Twist,queue_size = 1,latch=False)
         # Parameters
         self.robot_name = robot_name
         self.role = role
+        self.sim = sim
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
@@ -49,6 +52,11 @@ class Navie_controller():
         self.cmd_last = 0
         self.error_last = 0 
     
+    def sim_theta_cb(self, data):
+        '''
+        '''
+        self.base_link_xyt = (None, None, data.data)
+
     def cmd_cb(self,data):
         '''
         Topic /<robot_name>/cmd_vel callback function
@@ -101,6 +109,7 @@ class Navie_controller():
         elif error < -pi:
             error += 2*pi
         return error
+    
     def sign(self, value):
         if value >= 0: 
             return 1 
@@ -137,7 +146,7 @@ class Navie_controller():
             w_out = w*abs(cos(error)) + KP_diff*error
         return (v_out,w_out)
     
-    def iterate_once(self):
+    def run_once(self):
         '''
         call by main loop, execute every loop.
         '''
@@ -148,17 +157,22 @@ class Navie_controller():
             self.ref_ang == None:
             return
 
-        # Get tf 
-        self.get_base_link()
-        self.get_big_car()
-        if self.base_link_xyt == None or self.big_car_xyt == None: # If tf is invalid
-            return
-        #
-        self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
-       
+        # Get tf
+        if not self.sim:
+            self.get_base_link()
+            self.get_big_car()
+            if self.base_link_xyt == None or self.big_car_xyt == None: # If tf is invalid
+                return
+            self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
+        else:
+            self.sim_get_big_car()
+            if self.base_link_xyt == None or self.big_car_xyt == None : # Not get the theta call back yet
+                return
+            self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
+
         # Get refenrence angle
         if self.mode == "diff":
-            try: 
+            try:
                 R = self.Vc / self.Wc
             except ZeroDivisionError:
                 R = 99999
@@ -285,36 +299,40 @@ class Navie_controller():
             euler = tf.transformations.euler_from_quaternion(quaternion)
             self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
 
+    def sim_get_big_car(self):
+        '''
+        Get tf, odom_1 -> chassis_1 
+        '''
+        try:
+            t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
+        else:
+            quaternion = (
+                t.transform.rotation.x,
+                t.transform.rotation.y,
+                t.transform.rotation.z,
+                t.transform.rotation.w)
+            euler = tf.transformations.euler_from_quaternion(quaternion)
+            self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
 def main(args):
     rospy.init_node('rap_controller',anonymous=False)
     # Get global parameters
-    robot_name = rospy.get_param(param_name="~robot_name", default="car1")
-    role = rospy.get_param(param_name="~role", default="leader")
-    '''
-    is_parameters_set = False
-    
-    while (not is_parameters_set and not rospy.is_shutdown() ):
-        try:
-            robot_name = rospy.get_param("/unique_parameter/robot_name") # Find paramters in ros server
-            role       = rospy.get_param("/unique_parameter/role") # Find paramters in ros server
-            is_parameters_set = True
-        except:
-            rospy.logwarn("[rap controller] robot_name are not found in rosparam server, keep on trying...")
-            rospy.sleep(0.2) # Sleep 0.2 seconds for waiting the parameters loading
-            continue
-    '''
+    ROBOT_NAME = rospy.get_param(param_name="~robot_name", default="car1")
+    ROLE = rospy.get_param(param_name="~role", default="leader")
+    SIM  = rospy.get_param(param_name="~sim", default="false")
     # Init naive controller
-    navie_controller = Navie_controller(robot_name, role)
+    navie_controller = Navie_controller(ROBOT_NAME, ROLE,SIM)
     rate = rospy.Rate(10.0)
     while not rospy.is_shutdown():
-        navie_controller.iterate_once()
+        navie_controller.run_once()
         if navie_controller.is_need_publish:
-            if role == "leader" and navie_controller.V_leader != None and navie_controller.W_leader != None:
+            if ROLE == "leader" and navie_controller.V_leader != None and navie_controller.W_leader != None:
                 cmd_vel = Twist()
                 cmd_vel.linear.x  = navie_controller.V_leader
                 cmd_vel.angular.z = navie_controller.W_leader
                 navie_controller.pub_cmd_vel.publish(cmd_vel)
-            elif role == "follower" and navie_controller.V_follower != None and navie_controller.W_follower != None:
+            elif ROLE == "follower" and navie_controller.V_follower != None and navie_controller.W_follower != None:
                 cmd_vel = Twist()
                 cmd_vel.linear.x  = navie_controller.V_follower
                 cmd_vel.angular.z = navie_controller.W_follower
