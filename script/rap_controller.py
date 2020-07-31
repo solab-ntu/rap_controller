@@ -11,9 +11,10 @@ from std_msgs.msg import Float64
 #########################
 TOW_CAR_LENGTH = 0.93 # meter, Length between two cars
 V_MAX = 0.3 # m/s, Max velocity
-W_MAX = 0.6 # rad/s, MAX angular velocity
+W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
+KI = 1
 DT = 0.1 # sec
 
 # variable 
@@ -51,6 +52,7 @@ class Navie_controller():
         # PID
         self.cmd_last = 0
         self.error_last = 0 
+        self.sum_term = 0
     
     def sim_theta_cb(self, data):
         '''
@@ -119,19 +121,25 @@ class Navie_controller():
     def pi_controller(self, kp, ki,error):
         '''
         '''
-        cmd = self.cmd_last + error*kp + (kp-ki*DT)*self.error_last
-        self.cmd_last = cmd
-        self.error_last = error
+        # Yulin's suggestion
+        #cmd = self.cmd_last + error*kp + (kp-ki*DT)*self.error_last
+        #self.cmd_last = cmd
+        #self.error_last = error
+        
+        # Doris suggestion
+        self.sum_term = kp*ki*DT*error * 0.05 + self.sum_term * 0.95
+        cmd = kp*error + self.sum_term
+        print ("self.sum_term: " + str(self.sum_term))
         return cmd
     
     def crab_controller(self,vx,vy,error):
         '''
         Return leader crab controller result
         '''
-        v = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
-        w = KP_crab*error
-        # w = self.pi_controller(KP_crab, 0.001, error)
-        return (v,w)
+        v_out = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
+        # w = KP_crab*error
+        w_out = self.pi_controller(KP_crab, KI, error)
+        return (v_out, w_out)
     
     def diff_controller(self,vx,w,R,error):
         '''
@@ -139,11 +147,11 @@ class Navie_controller():
         '''
         v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
         if abs(error) > 0.2617993877991494:
-            w_out = KP_diff*error
-            # w = self.pi_controller(KP_diff, 0.001, error)
+            # w_out = KP_diff*error
+            w_out = self.pi_controller(KP_diff, KI, error)
         else:
-            # w = w*abs(cos(error)) + self.pi_controller(KP_diff, 0.001, error)
-            w_out = w*abs(cos(error)) + KP_diff*error
+            w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, 0.001, error)
+            # w_out = w*abs(cos(error)) + KP_diff*error
         return (v_out,w_out)
     
     def run_once(self):
@@ -315,6 +323,7 @@ class Navie_controller():
                 t.transform.rotation.w)
             euler = tf.transformations.euler_from_quaternion(quaternion)
             self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
+
 def main(args):
     rospy.init_node('rap_controller',anonymous=False)
     # Get global parameters
