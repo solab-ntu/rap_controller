@@ -11,9 +11,10 @@ from std_msgs.msg import Float64
 #########################
 TOW_CAR_LENGTH = 0.93 # meter, Length between two cars
 V_MAX = 0.3 # m/s, Max velocity
-W_MAX = 0.6 # rad/s, MAX angular velocity
+W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
+KI = 0
 DT = 0.1 # sec
 
 # variable 
@@ -51,6 +52,7 @@ class Navie_controller():
         # PID
         self.cmd_last = 0
         self.error_last = 0 
+        self.sum_term = 0
     
     def sim_theta_cb(self, data):
         '''
@@ -119,19 +121,25 @@ class Navie_controller():
     def pi_controller(self, kp, ki,error):
         '''
         '''
-        cmd = self.cmd_last + error*kp + (kp-ki*DT)*self.error_last
-        self.cmd_last = cmd
-        self.error_last = error
+        # Yulin's suggestion
+        #cmd = self.cmd_last + error*kp + (kp-ki*DT)*self.error_last
+        #self.cmd_last = cmd
+        #self.error_last = error
+        
+        # Doris suggestion
+        self.sum_term = kp*ki*DT*error * 0.05 + self.sum_term * 0.95
+        cmd = kp*error + self.sum_term
+        print ("self.sum_term: " + str(self.sum_term))
         return cmd
     
     def crab_controller(self,vx,vy,error):
         '''
         Return leader crab controller result
         '''
-        v = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
-        w = KP_crab*error
-        # w = self.pi_controller(KP_crab, 0.001, error)
-        return (v,w)
+        v_out = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
+        # w = KP_crab*error
+        w_out = self.pi_controller(KP_crab, KI, error)
+        return (v_out, w_out)
     
     def diff_controller(self,vx,w,R,error):
         '''
@@ -139,11 +147,11 @@ class Navie_controller():
         '''
         v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
         if abs(error) > 0.2617993877991494:
-            w_out = KP_diff*error
-            # w = self.pi_controller(KP_diff, 0.001, error)
+            # w_out = KP_diff*error
+            w_out = self.pi_controller(KP_diff, KI, error)
         else:
-            # w = w*abs(cos(error)) + self.pi_controller(KP_diff, 0.001, error)
-            w_out = w*abs(cos(error)) + KP_diff*error
+            w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, 0.001, error)
+            # w_out = w*abs(cos(error)) + KP_diff*error
         return (v_out,w_out)
     
     def run_once(self):
@@ -214,10 +222,10 @@ class Navie_controller():
         # Debug print
         # rospy.loginfo("[naive controller] W_Leader = "+str(KP)+"*(" + str(self.ref_ang) + " - " + str(self.theta))
         if self.role == "leader":
-            rospy.loginfo("[naive controller] Error_leader: "+ str(error_leader)+", ref_ang: " + str(self.ref_ang) + ", theta:" + str(self.theta))
-            rospy.loginfo("[naive controller] Leader: "+ str(error_leader)+" (" + str(self.V_leader) + ", " +str(self.W_leader) + ")")
+            rospy.loginfo("Error_leader: "+ str(error_leader)+", ref_ang=" + str(self.ref_ang) + ", theta:" + str(self.theta))
+            rospy.loginfo("Leader: "+ str(round(error_leader,3))+" (V=" + str(self.V_leader) + ", W=" +str(self.W_leader) + ")")
         elif self.role == "follower":
-            rospy.loginfo("[naive controller] Follower: "+ str(error_follower)+" (" + str(self.V_follower) + ", " +str(self.W_follower) + ")")
+            rospy.loginfo("Follower: "+ str(round(error_follower))+" (V=" + str(self.V_follower) + ", W=" +str(self.W_follower) + ")")
         
         # Set publish flag
         self.is_need_publish = True
@@ -310,17 +318,16 @@ class Navie_controller():
             euler = tf.transformations.euler_from_quaternion(quaternion)
             self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
 
-
     def sim_get_base_link(self):
         '''
         Get tf, map -> car1 : pepelepew
         '''
         try:
             # t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
-            t = self.tfBuffer.lookup_transform("map", "car1", rospy.Time())
+            t = self.tfBuffer.lookup_transform("map", self.robot_name, rospy.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
             # rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/car1")
+            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/" + str(self.robot_name))
         else:
             quaternion = (
                 t.transform.rotation.x,
@@ -345,12 +352,18 @@ def main(args):
             if ROLE == "leader" and navie_controller.V_leader != None and navie_controller.W_leader != None:
                 cmd_vel = Twist()
                 cmd_vel.linear.x  = navie_controller.V_leader
-                cmd_vel.angular.z = navie_controller.W_leader
+                if not SIM:
+                    cmd_vel.angular.z = navie_controller.W_leader
+                else: # TODO 
+                    cmd_vel.angular.z = -navie_controller.W_leader
                 navie_controller.pub_cmd_vel.publish(cmd_vel)
             elif ROLE == "follower" and navie_controller.V_follower != None and navie_controller.W_follower != None:
                 cmd_vel = Twist()
                 cmd_vel.linear.x  = navie_controller.V_follower
-                cmd_vel.angular.z = navie_controller.W_follower
+                if not SIM:
+                    cmd_vel.angular.z = navie_controller.W_follower
+                else: # TODO
+                    cmd_vel.angular.z = -navie_controller.W_follower
                 navie_controller.pub_cmd_vel.publish(cmd_vel)
             navie_controller.is_need_publish = False 
         rate.sleep()
