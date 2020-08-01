@@ -48,7 +48,7 @@ class Navie_controller():
         self.V_follower = None
         self.W_follower = None
         # Flags
-        self.mode = "crab" # "diff"
+        self.mode = "diff" # "crab"
         self.is_need_publish = False
         # PID
         self.cmd_last = 0
@@ -79,9 +79,9 @@ class Navie_controller():
         self.Wc = data.angular.z
         self.ref_ang = data.angular.x
         if data.angular.y == 0:
-            self.mode = "crab"
-        else: 
             self.mode = "diff"
+        else: 
+            self.mode = "crab"
     
     def normalize_angle(self,angle):
         '''
@@ -207,17 +207,7 @@ class Navie_controller():
                         self.ref_ang *= -1
                     else: # Go backward
                         pass
-
-                '''
-                if self.Vc >= 0: # Go forward
-                    self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
-                    if self.Wc < 0:
-                        self.ref_ang *= -1
-                elif self.Vc < 0: # Go backward
-                    self.ref_ang = self.normalize_angle(atan2(TOW_CAR_LENGTH/2.0, abs(R)) + pi)
-                    if self.Wc < 0:
-                        self.ref_ang *= -1
-                '''
+                        
         elif self.mode == "crab":
             if self.Vc >= 0: # Go forward
                 self.ref_ang = atan2(self.Vy, self.Vc)
