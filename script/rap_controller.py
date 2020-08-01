@@ -145,8 +145,14 @@ class Navie_controller():
         '''
         Return leader crab controller result
         '''
-        v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
-        w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        if R == float("inf"):
+            v_out = vx
+            w_out = self.pi_controller(KP_diff, KI, error)
+        else:
+            v_out = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
+            if not self.is_same_sign(vx,v_out):
+                v_out *= -1
+            w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         '''
         if abs(error) > THETA_ERROR_TOLERANCE: # Only adjust heading
             # w_out = KP_diff*error
@@ -187,10 +193,31 @@ class Navie_controller():
             try:
                 R = self.Vc / self.Wc
             except ZeroDivisionError:
-                R = 99999
+                R = float("inf")
                 self.ref_ang = 0
             else:
-                self.ref_ang = -atan2(TOW_CAR_LENGTH/2.0, R)
+                self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
+                if R >= 0: # Center is at LHS
+                    if self.Vc >= 0: #  Go forward
+                        pass 
+                    else: # Go backward
+                        self.ref_ang *= -1
+                else: # Center is at RHS
+                    if self.Vc >= 0: #  Go forward
+                        self.ref_ang *= -1
+                    else: # Go backward
+                        pass
+
+                '''
+                if self.Vc >= 0: # Go forward
+                    self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
+                    if self.Wc < 0:
+                        self.ref_ang *= -1
+                elif self.Vc < 0: # Go backward
+                    self.ref_ang = self.normalize_angle(atan2(TOW_CAR_LENGTH/2.0, abs(R)) + pi)
+                    if self.Wc < 0:
+                        self.ref_ang *= -1
+                '''
         elif self.mode == "crab":
             if self.Vc >= 0: # Go forward
                 self.ref_ang = atan2(self.Vy, self.Vc)
