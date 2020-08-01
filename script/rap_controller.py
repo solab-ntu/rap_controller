@@ -355,7 +355,7 @@ def main(args):
                 if not SIM:
                     cmd_vel.angular.z = navie_controller.W_leader
                 else: # TODO 
-                    cmd_vel.angular.z = -navie_controller.W_leader
+                    cmd_vel.angular.z = navie_controller.W_leader
                 navie_controller.pub_cmd_vel.publish(cmd_vel)
             elif ROLE == "follower" and navie_controller.V_follower != None and navie_controller.W_follower != None:
                 cmd_vel = Twist()
@@ -363,7 +363,7 @@ def main(args):
                 if not SIM:
                     cmd_vel.angular.z = navie_controller.W_follower
                 else: # TODO
-                    cmd_vel.angular.z = -navie_controller.W_follower
+                    cmd_vel.angular.z = navie_controller.W_follower
                 navie_controller.pub_cmd_vel.publish(cmd_vel)
             navie_controller.is_need_publish = False 
         rate.sleep()
