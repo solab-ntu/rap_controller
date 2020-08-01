@@ -17,7 +17,7 @@ KP_diff = 1.5 # KP fro diff mode
 KI = 0
 DT = 0.1 # sec
 
-THETA_ERROR_TOLERANCE = 0.08# 0.26 # 0.08 # radianf
+THETA_ERROR_TOLERANCE = 0.26 # 0.26 # 0.08 # radianf
 # variable 
 
 class Navie_controller():
@@ -145,16 +145,16 @@ class Navie_controller():
         '''
         Return leader crab controller result
         '''
-        
+        v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
+        w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        '''
         if abs(error) > THETA_ERROR_TOLERANCE: # Only adjust heading
             # w_out = KP_diff*error
-            print ("ADJUSTING HEADING")
-            v_out = 0.0
             w_out = self.pi_controller(KP_diff, KI, error)
         else:
-            v_out = (vx - sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
             w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
             # w_out = w*abs(cos(error)) + KP_diff*error
+        '''
         return (v_out,w_out)
     
     def run_once(self):
