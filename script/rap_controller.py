@@ -14,10 +14,10 @@ V_MAX = 0.3 # m/s, Max velocity
 W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
-KI = 0.01
+KI = 0
 DT = 0.1 # sec
 
-THETA_ERROR_TOLERANCE = 0.26 # 0.08 # radianf
+THETA_ERROR_TOLERANCE = 0.08# 0.26 # 0.08 # radianf
 # variable 
 
 class Navie_controller():
