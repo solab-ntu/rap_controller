@@ -17,7 +17,7 @@ KP_diff = 1.5 # KP fro diff mode
 KI = 0
 DT = 0.1 # sec
 
-THETA_ERROR_TOLERANCE = 0.08# 0.26 # 0.08 # radianf
+THETA_ERROR_TOLERANCE = 0.04# 0.26 # 0.08 # radianf
 # variable 
 
 class Navie_controller():
