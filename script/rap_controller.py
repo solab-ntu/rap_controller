@@ -182,18 +182,20 @@ class Rap_controller():
 
         # Get tf
         if not self.sim:
-            self.get_base_link()
-            self.get_big_car()
-            if self.base_link_xyt == None or self.big_car_xyt == None: # If tf is invalid
-                return
-            self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
+            self.base_link_xyt = self.get_tf(self.robot_name + "/map",
+                                 self.robot_name + "/base_link")
+            self.big_car_xyt   = self.get_tf(self.robot_name + "/map",
+                                 self.robot_name + "/center_big_car")
         else:
-            self.sim_get_base_link()
-            self.sim_get_big_car()
-            if self.base_link_xyt == None or self.big_car_xyt == None : # Not get the theta call back yet
-                return
-            self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2]) - self.normalize_angle(self.big_car_xyt[2]))
-
+            self.base_link_xyt = self.get_tf("map", self.robot_name)
+            self.big_car_xyt   = self.get_tf("map", "base_link")
+        if self.base_link_xyt == None or self.big_car_xyt == None: # If tf is invalid
+            return
+        
+        # Get current theta
+        self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2])
+                                        - self.normalize_angle(self.big_car_xyt[2]))
+        
         # Get refenrence angle
         if self.mode == "diff":
             # Get radius
@@ -221,12 +223,13 @@ class Rap_controller():
         
         # Calculate error of angle
         if self.role == "leader":
-            error_theta = self.nearest_error(self.ref_ang - self.theta)
+            pass
         elif self.role == "follower":
             if self.mode == "crab":
-                error_theta = self.nearest_error(pi + self.ref_ang - self.theta)
+                self.ref_ang += pi
             elif self.mode == "diff":
-                error_theta = self.nearest_error(pi - self.ref_ang - self.theta)
+                self.ref_ang = pi - self.ref_ang
+        error_theta = self.nearest_error(self.ref_ang - self.theta)
 
         # Get v_out, w_out
         if self.mode == "crab":
@@ -243,10 +246,16 @@ class Rap_controller():
         self.w_out = self.saturation(self.w_out, W_MAX)
         
         # Set marker line
+        # Reference ang
         p1 = self.base_link_xyt[:2]
-        p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.base_link_xyt[2]),
-              p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.base_link_xyt[2]))
+        p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.big_car_xyt[2]),
+              p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.big_car_xyt[2]))
         set_line([p1, p2], RGB = (255,138,189), size = 0.02 ,id = 0)
+
+        # Current ang
+        p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.base_link_xyt[2]),
+              p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.base_link_xyt[2]))
+        set_line([p1, p2], RGB = (255,0,0), size = 0.02 ,id = 1)
         
         # Set publish flag
         self.is_need_publish = True
@@ -284,49 +293,22 @@ class Rap_controller():
             return True
         else:
             return False
-    
-    def get_base_link(self):
-        '''
-        Get tf, map -> base_link 
-        '''
-        try:
-            t = self.tfBuffer.lookup_transform(self.robot_name + "/map", self.robot_name + "/base_link", rospy.Time())
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + self.robot_name + "/map -> " + self.robot_name + "/base_link")
-        else:
-            quaternion = (
-                t.transform.rotation.x,
-                t.transform.rotation.y,
-                t.transform.rotation.z,
-                t.transform.rotation.w)
-            euler = tf.transformations.euler_from_quaternion(quaternion)
-            self.base_link_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
-    
-    def get_big_car(self):
-        '''
-        Get tf, map -> center_big_car 
-        '''
-        try:
-            t = self.tfBuffer.lookup_transform(self.robot_name + "/map", self.robot_name + "/center_big_car", rospy.Time())
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + self.robot_name + "/map -> " + self.robot_name + "/center_big_car")
-        else:
-            quaternion = (
-                t.transform.rotation.x,
-                t.transform.rotation.y,
-                t.transform.rotation.z,
-                t.transform.rotation.w)
-            euler = tf.transformations.euler_from_quaternion(quaternion)
-            self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
 
-    def sim_get_big_car(self):
+    def get_tf(self,frame_id, child_frame_id):
         '''
-        Get tf, map -> base_link : pepelepew
+        get tf frame_id -> child_frame_id
+        Arguments:
+            frame_id(str): e.g: "map", "odom"
+            child_frame_id(str): e.g: "base_link"
+        Return:
+            (x,y,theta)
+            None, if tf is unvaliable
         '''
         try:
-            t = self.tfBuffer.lookup_transform("map", "base_link", rospy.Time())
+            t = self.tfBuffer.lookup_transform(frame_id, child_frame_id, rospy.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/base_link")
+            rospy.logwarn("[rap_controller] Can't get tf frame: " + frame_id + " -> " + child_frame_id)
+            return None
         else:
             quaternion = (
                 t.transform.rotation.x,
@@ -334,24 +316,7 @@ class Rap_controller():
                 t.transform.rotation.z,
                 t.transform.rotation.w)
             euler = tf.transformations.euler_from_quaternion(quaternion)
-            self.big_car_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
-
-    def sim_get_base_link(self):
-        '''
-        Get tf, map -> car1 : pepelepew
-        '''
-        try:
-            t = self.tfBuffer.lookup_transform("map", self.robot_name, rospy.Time())
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/" + str(self.robot_name))
-        else:
-            quaternion = (
-                t.transform.rotation.x,
-                t.transform.rotation.y,
-                t.transform.rotation.z,
-                t.transform.rotation.w)
-            euler = tf.transformations.euler_from_quaternion(quaternion)
-            self.base_link_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
+            return (t.transform.translation.x, t.transform.translation.y, euler[2])
 
 #######################
 ### Global function ###
