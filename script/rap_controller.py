@@ -6,6 +6,7 @@ import tf # conversion euler
 from geometry_msgs.msg import Twist # topic /cmd_vel
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
+
 #########################
 ### Global parameters ###
 #########################
@@ -17,10 +18,7 @@ KP_diff = 1.5 # KP fro diff mode
 KI = 0
 DT = 0.1 # sec
 
-THETA_ERROR_TOLERANCE = 0.26 # 0.26 # 0.08 # radianf
-# variable 
-
-class Navie_controller():
+class Rap_controller():
     def __init__(self,robot_name, role, sim):
         # Subscriber
         rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
@@ -43,10 +41,9 @@ class Navie_controller():
         self.Vy = None
         self.Wc = None
         self.ref_ang = None
-        self.V_leader = None
-        self.W_leader = None
-        self.V_follower = None
-        self.W_follower = None
+        # Output 
+        self.v_out = None
+        self.w_out = None
         # Flags
         self.mode = "diff" # "crab"
         self.is_need_publish = False
@@ -57,6 +54,7 @@ class Navie_controller():
     
     def sim_theta_cb(self, data):
         '''
+        Get theta from topics
         '''
         self.base_link_xyt = (None, None, data.data)
 
@@ -141,28 +139,29 @@ class Navie_controller():
         w_out = self.pi_controller(KP_crab, KI, error)
         return (v_out, w_out)
     
-    def diff_controller(self,vx,w,R,error):
+    def diff_controller(self,vx,wz,error):
         '''
         Return leader crab controller result
         '''
+        R = self.get_radius_of_rotation(vx, wz)
         if R == float("inf"):
-            v_out = vx
-            w_out = self.pi_controller(KP_diff, KI, error)
+            v_con = vx
+            w_con = self.pi_controller(KP_diff, KI, error)
         else:
-            v_out = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*w) *abs(cos(error))
-            if not self.is_same_sign(vx,v_out):
-                v_out *= -1
-            w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
-        '''
-        if abs(error) > THETA_ERROR_TOLERANCE: # Only adjust heading
-            # w_out = KP_diff*error
-            w_out = self.pi_controller(KP_diff, KI, error)
-        else:
-            w_out = w*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
-            # w_out = w*abs(cos(error)) + KP_diff*error
-        '''
-        return (v_out,w_out)
+            v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
+            if not self.is_same_sign(vx,v_con):
+                v_con *= -1
+            w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        return (v_con, w_con)
     
+    def get_radius_of_rotation(self,v,w):
+        try:
+            radius = v / w
+        except ZeroDivisionError:
+            return float("inf")
+        else:
+            return radius 
+
     def run_once(self):
         '''
         call by main loop, execute every loop.
@@ -190,23 +189,22 @@ class Navie_controller():
 
         # Get refenrence angle
         if self.mode == "diff":
-            try:
-                R = self.Vc / self.Wc
-            except ZeroDivisionError:
-                R = float("inf")
+            # Get radius
+            R = self.get_radius_of_rotation(self.Vc, self.Wc)
+            if R == float("inf"):
                 self.ref_ang = 0
-            else:
-                self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
-                if R >= 0: # Center is at LHS
-                    if self.Vc >= 0: #  Go forward
-                        pass 
-                    else: # Go backward
-                        self.ref_ang *= -1
-                else: # Center is at RHS
-                    if self.Vc >= 0: #  Go forward
-                        self.ref_ang *= -1
-                    else: # Go backward
-                        pass
+
+            self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
+            if R >= 0: # Center is at LHS
+                if self.Vc >= 0: #  Go forward
+                    pass 
+                else: # Go backward
+                    self.ref_ang *= -1
+            else: # Center is at RHS
+                if self.Vc >= 0: #  Go forward
+                    self.ref_ang *= -1
+                else: # Go backward
+                    pass
                         
         elif self.mode == "crab":
             if self.Vc >= 0: # Go forward
@@ -214,38 +212,28 @@ class Navie_controller():
             elif self.Vc < 0: # Go backward
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
         
-        # Leader
-        error_leader = self.nearest_error(self.ref_ang - self.theta)
-        if self.mode == "crab":
-            (self.V_leader, self.W_leader) = self.crab_controller(self.Vc, self.Vy, error_leader)
-
-        elif self.mode == "diff":
-            (self.V_leader, self.W_leader) = self.diff_controller(self.Vc, self.Wc, R,error_leader)
-
-        # Follower
-        if self.mode == "crab":
-            error_follower = self.nearest_error(pi + self.ref_ang - self.theta)
-            (self.V_follower, self.W_follower) =\
-                self.crab_controller(self.Vc, self.Vy, error_follower)
-        elif self.mode == "diff":
-            error_follower = self.nearest_error(pi - self.ref_ang - self.theta)
-            (self.V_follower, self.W_follower) =\
-                self.diff_controller(self.Vc, self.Wc, R,error_follower)
-        
-        self.V_follower *= -1.0
-        # Saturation velocity, for safty
-        self.V_leader = self.saturation(self.V_leader, V_MAX)
-        self.W_leader = self.saturation(self.W_leader, W_MAX)
-        self.V_follower = self.saturation(self.V_follower, V_MAX)
-        self.W_follower = self.saturation(self.W_follower, W_MAX)
-        
-        # Debug print
-        # rospy.loginfo("[naive controller] W_Leader = "+str(KP)+"*(" + str(self.ref_ang) + " - " + str(self.theta))
+        # Calculate error of angle
         if self.role == "leader":
-            rospy.loginfo("Error_leader: "+ str(error_leader)+", ref_ang=" + str(self.ref_ang) + ", theta:" + str(self.theta))
-            rospy.loginfo("Leader: "+ str(round(error_leader,3))+" (V=" + str(self.V_leader) + ", W=" +str(self.W_leader) + ")")
+            error_theta = self.nearest_error(self.ref_ang - self.theta)
         elif self.role == "follower":
-            rospy.loginfo("Follower: "+ str(round(error_follower))+" (V=" + str(self.V_follower) + ", W=" +str(self.W_follower) + ")")
+            if self.mode == "crab":
+                error_theta = self.nearest_error(pi + self.ref_ang - self.theta)
+            elif self.mode == "diff":
+                error_theta = self.nearest_error(pi - self.ref_ang - self.theta)
+
+        # Get v_out, w_out
+        if self.mode == "crab":
+            (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
+        elif self.mode == "diff":
+            (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
+
+        # Reverse follower heading velocity
+        if self.role == "follower":
+            self.v_out *= -1.0
+        
+        # Saturation velocity, for safty
+        self.v_out = self.saturation(self.v_out, V_MAX)
+        self.w_out = self.saturation(self.w_out, W_MAX)
         
         # Set publish flag
         self.is_need_publish = True
@@ -363,29 +351,28 @@ def main(args):
     ROBOT_NAME = rospy.get_param(param_name="~robot_name", default="car1")
     ROLE = rospy.get_param(param_name="~role", default="leader")
     SIM  = rospy.get_param(param_name="~sim", default="false")
+    REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
+    
     # Init naive controller
-    navie_controller = Navie_controller(ROBOT_NAME, ROLE,SIM)
+    rap_controller = Rap_controller(ROBOT_NAME, ROLE,SIM)
+    
     rate = rospy.Rate(10.0)
     while not rospy.is_shutdown():
-        navie_controller.run_once()
-        if navie_controller.is_need_publish:
-            if ROLE == "leader" and navie_controller.V_leader != None and navie_controller.W_leader != None:
-                cmd_vel = Twist()
-                cmd_vel.linear.x  = navie_controller.V_leader
-                if not SIM:
-                    cmd_vel.angular.z = navie_controller.W_leader
-                else: # TODO 
-                    cmd_vel.angular.z = navie_controller.W_leader
-                navie_controller.pub_cmd_vel.publish(cmd_vel)
-            elif ROLE == "follower" and navie_controller.V_follower != None and navie_controller.W_follower != None:
-                cmd_vel = Twist()
-                cmd_vel.linear.x  = navie_controller.V_follower
-                if not SIM:
-                    cmd_vel.angular.z = navie_controller.W_follower
-                else: # TODO
-                    cmd_vel.angular.z = navie_controller.W_follower
-                navie_controller.pub_cmd_vel.publish(cmd_vel)
-            navie_controller.is_need_publish = False 
+        rap_controller.run_once()
+        if  rap_controller.is_need_publish and\
+            rap_controller.v_out != None   and\
+            rap_controller.w_out != None:
+            cmd_vel = Twist()
+            cmd_vel.linear.x  = rap_controller.v_out
+            cmd_vel.angular.z = rap_controller.w_out
+            if REVERSE_OMEGA: # This is for weird simulation bug
+                cmd_vel.angular.z = -cmd_vel.angular.z
+            
+            rap_controller.pub_cmd_vel.publish(cmd_vel)
+            # Debug print
+            rospy.loginfo(rap_controller.role + " : V=" + str(round(rap_controller.v_out, 3)) +
+                                                 ", W=" +str(round(rap_controller.w_out, 3)))
+            rap_controller.is_need_publish = False 
         rate.sleep()
 
 if __name__ == '__main__':

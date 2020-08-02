@@ -3,10 +3,12 @@
     <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car1" output='screen'>
         <param name="robot_name" value="car1"/>
         <param name="role" value="leader"/>
+        <param name="reverse_omega" value="false"/>
     </node>
     <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car2" output='screen'>
         <param name="robot_name" value="car2"/>
         <param name="role" value="follower"/>
+        <param name="reverse_omega" value="false"/>
     </node>
 
     <node pkg="joy" type="joy_node" name="joy">
