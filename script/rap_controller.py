@@ -3,9 +3,12 @@ import rospy
 import sys
 import tf2_ros
 import tf # conversion euler
+import random
 from geometry_msgs.msg import Twist # topic /cmd_vel
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
+from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
+from geometry_msgs.msg import Point
 
 #########################
 ### Global parameters ###
@@ -18,14 +21,18 @@ KP_diff = 1.5 # KP fro diff mode
 KI = 0
 DT = 0.1 # sec
 
+# Global variable
+MARKER_LINE = MarkerArray()# Line markers show on RVIZ
+
 class Rap_controller():
     def __init__(self,robot_name, role, sim):
         # Subscriber
         rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
-        if sim:
-            rospy.Subscriber("/"+robot_name+"/"+"theta", Float64, self.sim_theta_cb)
+        #if sim:
+        #    rospy.Subscriber("/"+robot_name+"/"+"theta", Float64, self.sim_theta_cb)
         # Publisher
         self.pub_cmd_vel = rospy.Publisher("/"+robot_name+'/cmd_vel', Twist,queue_size = 1,latch=False)
+        self.pub_marker_line = rospy.Publisher("/"+robot_name+'/marker_line', MarkerArray,queue_size = 1,latch=False)
         # Parameters
         self.robot_name = robot_name
         self.role = role
@@ -235,6 +242,12 @@ class Rap_controller():
         self.v_out = self.saturation(self.v_out, V_MAX)
         self.w_out = self.saturation(self.w_out, W_MAX)
         
+        # Set marker line
+        p1 = self.base_link_xyt[:2]
+        p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.base_link_xyt[2]),
+              p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.base_link_xyt[2]))
+        set_line([p1, p2], RGB = (255,138,189), size = 0.02 ,id = 0)
+        
         # Set publish flag
         self.is_need_publish = True
 
@@ -308,14 +321,11 @@ class Rap_controller():
 
     def sim_get_big_car(self):
         '''
-        Get tf, odom_1 -> chassis_1 : mobydick
         Get tf, map -> base_link : pepelepew
         '''
         try:
-            # t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
             t = self.tfBuffer.lookup_transform("map", "base_link", rospy.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            # rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
             rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/base_link")
         else:
             quaternion = (
@@ -331,10 +341,8 @@ class Rap_controller():
         Get tf, map -> car1 : pepelepew
         '''
         try:
-            # t = self.tfBuffer.lookup_transform("odom_1", "chassis_1", rospy.Time())
             t = self.tfBuffer.lookup_transform("map", self.robot_name, rospy.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            # rospy.logwarn("[rap_controller] Can't get tf frame: " + "/odom_1 -> " + "/chassis_1")
             rospy.logwarn("[rap_controller] Can't get tf frame: " + "/map -> " + "/" + str(self.robot_name))
         else:
             quaternion = (
@@ -344,7 +352,47 @@ class Rap_controller():
                 t.transform.rotation.w)
             euler = tf.transformations.euler_from_quaternion(quaternion)
             self.base_link_xyt = (t.transform.translation.x, t.transform.translation.y, euler[2])
-    
+
+#######################
+### Global function ###
+#######################
+def set_line(points , RGB = None , size = 0.2, id = 0):
+    '''
+    Set line at MarkArray
+    Input : 
+        points = [p1,p2....]
+        RGB - tuple : (255,255,255)
+        size - float: width of line
+        id - int
+    '''
+    global MARKER_LINE
+    marker = Marker()
+    marker.header.frame_id = "map"
+    marker.id = id
+    marker.ns = "tiles"
+    marker.header.stamp = rospy.get_rostime()
+    marker.type = marker.LINE_STRIP
+    marker.action = marker.ADD
+    marker.scale.x = size
+    marker.scale.y = size
+    marker.scale.z = size
+    marker.color.a = 1.0
+    if RGB == None : 
+        marker.color.r = random.randint(0,255) / 255.0
+        marker.color.g = random.randint(0,255) / 255.0
+        marker.color.b = random.randint(0,255) / 255.0
+    else: 
+        marker.color.r = RGB[0]/255.0
+        marker.color.g = RGB[1]/255.0
+        marker.color.b = RGB[2]/255.0
+    marker.pose.orientation.w = 1.0
+    for i in points:
+        p = Point()
+        p.x = i[0]
+        p.y = i[1]
+        marker.points.append(p)
+    MARKER_LINE.markers.append(marker)
+
 def main(args):
     rospy.init_node('rap_controller',anonymous=False)
     # Get global parameters
@@ -369,6 +417,8 @@ def main(args):
                 cmd_vel.angular.z = -cmd_vel.angular.z
             
             rap_controller.pub_cmd_vel.publish(cmd_vel)
+            # Publish marker, for debug
+            rap_controller.pub_marker_line.publish(MARKER_LINE)
             # Debug print
             rospy.loginfo(rap_controller.role + " : V=" + str(round(rap_controller.v_out, 3)) +
                                                  ", W=" +str(round(rap_controller.w_out, 3)))
