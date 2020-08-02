@@ -133,7 +133,8 @@ class Rap_controller():
         #self.error_last = error
         
         # Doris suggestion
-        self.sum_term = kp*ki*DT*error * 0.05 + self.sum_term * 0.95
+        # self.sum_term = kp*ki*DT*error * 0.05 + self.sum_term * 0.95
+        self.sum_term = kp*ki*DT*error
         cmd = kp*error + self.sum_term
         return cmd
     
@@ -158,7 +159,10 @@ class Rap_controller():
             v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
             if not self.is_same_sign(vx,v_con):
                 v_con *= -1
-            w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+            if vx >= 0:
+                w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+            else:
+                w_con = -wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         return (v_con, w_con)
     
     def get_radius_of_rotation(self,v,w):
@@ -230,7 +234,7 @@ class Rap_controller():
             elif self.mode == "diff":
                 self.ref_ang = pi - self.ref_ang
         error_theta = self.nearest_error(self.ref_ang - self.theta)
-
+        
         # Get v_out, w_out
         if self.mode == "crab":
             (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
