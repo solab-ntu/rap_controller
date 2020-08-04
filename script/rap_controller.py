@@ -163,6 +163,9 @@ class Rap_controller():
         '''
         v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
         w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        if ref_ang < 0 and self.role == "leader":
+            v_con = -v_con
+            # w_con = -wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         
         return (v_con, w_con)
 
@@ -213,7 +216,7 @@ class Rap_controller():
             if self.Vc == 0:# In-place rotation
                 # Choose a nearest ref_ang to pursu, two possibility: (-pi/2, pi/2)
                 if  abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta) and\
-                    self.theta < -0.1:
+                    self.theta < -0.2:
                     self.ref_ang *= -1
             
             # Get error
@@ -225,11 +228,11 @@ class Rap_controller():
             if self.Vc != 0:
                 (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
             else:
-                (self.v_out, self.w_out) = self.rota_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
+                (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
 
             # Reverse follower heading velocity
             if self.role == "follower":
-                self.v_out *= -1.0
+                self.v_out = -self.v_out
                         
         elif self.mode == "crab":
             # Get refenrence angle
@@ -248,7 +251,7 @@ class Rap_controller():
             
             # Reverse follower heading velocity
             if self.role == "follower":
-                self.v_out *= -1.0
+                self.v_out = -self.v_out
 
         # Saturation velocity, for safty
         self.v_out = self.saturation(self.v_out, V_MAX)
