@@ -177,6 +177,7 @@ class Rap_controller():
             self.Vy == None or\
             self.Wc == None or\
             self.ref_ang == None:
+            rospy.logwarn("[rap_controller] Command not yet set.")
             return
 
         # Get tf
