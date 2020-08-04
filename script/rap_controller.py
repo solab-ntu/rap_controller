@@ -137,10 +137,10 @@ class Rap_controller():
         '''
         Return leader crab controller result
         '''
-        v_out = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
+        v_con = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
         # w = KP_crab*error
-        w_out = self.pi_controller(KP_crab, KI, error)
-        return (v_out, w_out)
+        w_con = self.pi_controller(KP_crab, KI, error)
+        return (v_con, w_con)
     
     def diff_controller(self,vx,wz,error):
         '''
@@ -152,14 +152,20 @@ class Rap_controller():
             w_con = self.pi_controller(KP_diff, KI, error)
         else:
             v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
-            if R == 0: # pure rotation
-                w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
-            else:
-                if not self.is_same_sign(vx,v_con):
-                    v_con *= -1
-                w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+            if not self.is_same_sign(vx,v_con):
+                v_con *= -1
+            w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         return (v_con, w_con)
     
+    def rota_controller(self,wz,error,ref_ang):
+        '''
+        Inplace rotation controller
+        '''
+        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
+        w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        
+        return (v_con, w_con)
+
     def get_radius_of_rotation(self,v,w):
         try:
             radius = v / w
@@ -198,55 +204,52 @@ class Rap_controller():
         
         # Get refenrence angle
         if self.mode == "diff":
-            # Get radius
+            # Get refenrence angle
             R = self.get_radius_of_rotation(self.Vc, self.Wc)
-            if R == float("inf"):
-                self.ref_ang = 0
-
             self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
-            if R >= 0: # Center is at LHS
-                if self.Vc > 0: #  Go forward
-                    pass
-                elif self.Vc == 0:
-                    if abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta):
-                        self.ref_ang *= -1
-                else: # Go backward
+            if not self.is_same_sign(R, self.Vc):
+                self.ref_ang *= -1
+
+            if self.Vc == 0:# In-place rotation
+                # Choose a nearest ref_ang to pursu, two possibility: (-pi/2, pi/2)
+                if  abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta) and\
+                    self.theta < -0.1:
                     self.ref_ang *= -1
-            else: # Center is at RHS
-                if self.Vc >= 0: #  Go forward
-                    self.ref_ang *= -1
-                elif self.Vc == 0:
-                    if abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta):
-                        self.ref_ang *= -1
-                else: # Go backward
-                    pass
+            
+            # Get error
+            if self.role == "follower":
+                self.ref_ang = pi - self.ref_ang
+            error_theta = self.nearest_error(self.ref_ang - self.theta)
+
+            # Get v_out, w_out
+            if self.Vc != 0:
+                (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
+            else:
+                (self.v_out, self.w_out) = self.rota_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
+
+            # Reverse follower heading velocity
+            if self.role == "follower":
+                self.v_out *= -1.0
                         
         elif self.mode == "crab":
+            # Get refenrence angle
             if self.Vc >= 0: # Go forward
                 self.ref_ang = atan2(self.Vy, self.Vc)
             elif self.Vc < 0: # Go backward
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
-        
-        # Calculate error of angle
-        if self.role == "leader":
-            pass
-        elif self.role == "follower":
-            if self.mode == "crab":
+            
+            # Get error
+            if self.role == "follower":
                 self.ref_ang += pi
-            elif self.mode == "diff":
-                self.ref_ang = pi - self.ref_ang
-        error_theta = self.nearest_error(self.ref_ang - self.theta)
-        
-        # Get v_out, w_out
-        if self.mode == "crab":
-            (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
-        elif self.mode == "diff":
-            (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
+            error_theta = self.nearest_error(self.ref_ang - self.theta)
 
-        # Reverse follower heading velocity
-        if self.role == "follower":
-            self.v_out *= -1.0
-        
+            # Get v_out, w_out
+            (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
+            
+            # Reverse follower heading velocity
+            if self.role == "follower":
+                self.v_out *= -1.0
+
         # Saturation velocity, for safty
         self.v_out = self.saturation(self.v_out, V_MAX)
         self.w_out = self.saturation(self.w_out, W_MAX)
