@@ -96,12 +96,7 @@ class Rap_controller():
         Return:
             float
         '''
-        sign = None 
-        if angle >= 0:
-            sign = 1
-        else: 
-            sign = -1 
-        ans = angle % (2* pi * sign)
+        ans = (abs(angle) % (2* pi))*self.sign(angle)
         if ans < -pi: # [-2pi, -pi]
             ans += 2*pi
         elif ans > pi: # [pi, 2pi]
@@ -119,7 +114,7 @@ class Rap_controller():
         return error
     
     def sign(self, value):
-        if value >= 0: 
+        if value >= 0:
             return 1 
         if value < 0:
             return -1
@@ -134,7 +129,7 @@ class Rap_controller():
         
         # Doris suggestion
         # self.sum_term = kp*ki*DT*error * 0.05 + self.sum_term * 0.95
-        self.sum_term = kp*ki*DT*error
+        self.sum_term += kp*ki*DT*error
         cmd = kp*error + self.sum_term
         return cmd
     
@@ -152,17 +147,17 @@ class Rap_controller():
         Return leader crab controller result
         '''
         R = self.get_radius_of_rotation(vx, wz)
-        if R == float("inf"):
+        if R == float("inf"):# Go straight
             v_con = vx
             w_con = self.pi_controller(KP_diff, KI, error)
         else:
             v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
-            if not self.is_same_sign(vx,v_con):
-                v_con *= -1
-            if vx >= 0:
+            if R == 0: # pure rotation
                 w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
             else:
-                w_con = -wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+                if not self.is_same_sign(vx,v_con):
+                    v_con *= -1
+                w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         return (v_con, w_con)
     
     def get_radius_of_rotation(self,v,w):
@@ -209,13 +204,19 @@ class Rap_controller():
 
             self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
             if R >= 0: # Center is at LHS
-                if self.Vc >= 0: #  Go forward
-                    pass 
+                if self.Vc > 0: #  Go forward
+                    pass
+                elif self.Vc == 0:
+                    if abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta):
+                        self.ref_ang *= -1
                 else: # Go backward
                     self.ref_ang *= -1
             else: # Center is at RHS
                 if self.Vc >= 0: #  Go forward
                     self.ref_ang *= -1
+                elif self.Vc == 0:
+                    if abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta):
+                        self.ref_ang *= -1
                 else: # Go backward
                     pass
                         
