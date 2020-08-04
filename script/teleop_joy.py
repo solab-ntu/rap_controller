@@ -48,9 +48,9 @@ def cb_joy(data):
             twist.linear.y = vy
             twist.angular.z = wz
             if MODE == "crab":
-                twist.angular.y = 0.0
-            elif MODE == "diff":
                 twist.angular.y = 1.0
+            elif MODE == "diff":
+                twist.angular.y = 0.0
             
             # Don't send -0.0
             if twist.linear.x == 0.0:
@@ -85,8 +85,8 @@ if __name__ == '__main__':
     VX_LAST = 0.0
     VY_LAST = 0.0
     WZ_LAST = 0.0
-    MODE = "crab"
-    rospy.loginfo("Switch to CRAB MODE")
+    MODE = "diff"
+    rospy.loginfo("Switch to DIFF MODE")
 
     PUB_CAR1 = rospy.Publisher(name="/car1/naive_cmd", data_class=Twist, queue_size=1)
     PUB_CAR2 = rospy.Publisher(name="/car2/naive_cmd", data_class=Twist, queue_size=1)
