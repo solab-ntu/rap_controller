@@ -20,7 +20,6 @@ V_MAX = 0.3 # m/s, Max velocity
 W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
-# KI = 0.01
 KI = 0
 # Global variable
 MARKER_LINE = MarkerArray()# Line markers show on RVIZ
@@ -131,26 +130,34 @@ class Rap_controller():
         w_con = self.pi_controller(KP_crab, KI, error)
         return (v_con, w_con)
     
-    def diff_controller(self,vx,wz,error):
+    def diff_controller(self,vx,wz,error,ref_ang):
         '''
         Return leader crab controller result
         '''
+        print ("diff_controller")
         R = self.get_radius_of_rotation(vx, wz)
         if R == float("inf"):# Go straight
             v_con = vx
             w_con = self.pi_controller(KP_diff, KI, error)
         else:
             v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
-            if not self.is_same_sign(vx,v_con):
-                v_con *= -1
-            w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+            if abs(R) < 0.1:  # TODO
+                w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+                if ref_ang < 0: # ref_ang == -pi/2
+                    v_con *= -1
+            else:
+                if not self.is_same_sign(vx,v_con):
+                    v_con *= -1
+                w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         return (v_con, w_con)
     
     def rota_controller(self,wz,error,ref_ang):
         '''
         Inplace rotation controller
         '''
-        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
+        print ("rota_controller")
+        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error)) # TODO test
+        # v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
         w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         if ref_ang < 0: # ref_ang == -pi/2
             v_con = -v_con
@@ -201,8 +208,10 @@ class Rap_controller():
             self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
             if not self.is_same_sign(R, self.Vc):
                 self.ref_ang *= -1
-
-            if self.Vc == 0:# In-place rotation
+            print ("R = "  + str(R))
+            # if self.Vc == 0:# In-place rotation
+            
+            if abs(R) < 0.1:  # TODO 
                 # Choose a nearest ref_ang to prsue, two possibility: (-pi/2, pi/2)
                 if  abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta) and\
                     self.theta < -0.2:
@@ -214,11 +223,14 @@ class Rap_controller():
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
             # Get v_out, w_out
-            if self.Vc != 0:
-                (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
-            else:
+            # if self.Vc != 0:
+            (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
+            '''
+            if abs(R) < 0.1:  # TODO 
                 (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
-
+            else:
+                (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
+            '''
             # Reverse follower heading velocity
             if self.role == "follower":
                 self.v_out = -self.v_out
