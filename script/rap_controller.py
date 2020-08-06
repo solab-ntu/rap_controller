@@ -266,11 +266,11 @@ class Rap_controller():
         p1 = self.base_link_xyt[:2]
         p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.big_car_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.big_car_xyt[2]))
-        set_line([p1, p2], RGB = (0,0,255), size = 0.02 ,id = 0)
+        set_line([p1, p2], "/" + str(robot_name) + "/map", RGB = (0,0,255), size = 0.02 ,id = 0)
         # Current ang
         p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.base_link_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.base_link_xyt[2]))
-        set_line([p1, p2], RGB = (102,178,255), size = 0.02 ,id = 1)
+        set_line([p1, p2], "/" + str(robot_name) + "/map", RGB = (102,178,255), size = 0.02 ,id = 1)
         
         # Set publish flag
         return True
@@ -339,7 +339,7 @@ class Rap_controller():
 #######################
 ### Global function ###
 #######################
-def set_line(points , RGB = None , size = 0.2, id = 0):
+def set_line(points, frame_id, RGB = None , size = 0.2, id = 0):
     '''
     Set line at MarkArray
     Input : 
@@ -350,7 +350,7 @@ def set_line(points , RGB = None , size = 0.2, id = 0):
     '''
     global MARKER_LINE
     marker = Marker()
-    marker.header.frame_id = "map"
+    marker.header.frame_id = frame_id
     marker.id = id
     marker.ns = "tiles"
     marker.header.stamp = rospy.get_rostime()
