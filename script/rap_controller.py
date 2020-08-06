@@ -266,11 +266,11 @@ class Rap_controller():
         p1 = self.base_link_xyt[:2]
         p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.big_car_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.big_car_xyt[2]))
-        set_line([p1, p2], "/" + str(robot_name) + "/map", RGB = (0,0,255), size = 0.02 ,id = 0)
+        set_line([p1, p2], "/" + str(self.robot_name) + "/map", RGB = (0,0,255), size = 0.02 ,id = 0)
         # Current ang
         p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.base_link_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.base_link_xyt[2]))
-        set_line([p1, p2], "/" + str(robot_name) + "/map", RGB = (102,178,255), size = 0.02 ,id = 1)
+        set_line([p1, p2], "/" + str(self.robot_name) + "/map", RGB = (102,178,255), size = 0.02 ,id = 1)
         
         # Set publish flag
         return True
