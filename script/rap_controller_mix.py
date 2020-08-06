@@ -129,7 +129,6 @@ class Rap_controller():
         '''
         Return leader crab controller result
         '''
-        print ("diff_controller")
         R = self.get_radius_of_rotation(vx, wz)
         if R == float("inf"):# Go straight
             v_con = vx
@@ -146,6 +145,25 @@ class Rap_controller():
                 w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         return (v_con, w_con)
     
+    def diff_mix_controller(self,vx,vy,wz,error,ref_ang):
+        '''
+        Return leader crab controller result
+        '''
+        R = self.get_radius_of_rotation(sqrt(vx**2 + vy**2), wz)
+        if R == float("inf"):# Go straight
+            v_con = 0.0
+            w_con = self.pi_controller(KP_diff, KI, error)
+        else:
+            v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
+            if abs(R) < 0.1:  # TODO
+                w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+                if ref_ang < 0: # ref_ang == -pi/2
+                    v_con *= -1
+            else:
+                if not self.is_same_sign(vx,v_con):
+                    v_con *= -1
+                w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        return (v_con, w_con)
     def rota_controller(self,wz,error,ref_ang):
         '''
         Inplace rotation controller
@@ -157,7 +175,22 @@ class Rap_controller():
         if ref_ang < 0: # ref_ang == -pi/2
             v_con = -v_con
         return (v_con, w_con)
-
+    
+    def mix_controller(self,vx,vy,wz,error):
+        '''
+        Return leader crab controller result
+        '''
+        v_crab_con = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
+        R = self.get_radius_of_rotation(sqrt(vx**2 + vy**2), wz)
+        if R == float("inf"):# Go straight
+            v_diff_con = 0
+            w_diff_con = self.pi_controller(KP_diff, KI, error)
+        else:
+            v_diff_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error)) ## TODO TODO TODO
+            if not self.is_same_sign(vx,v_diff_con):
+                    v_diff_con *= -1
+            w_diff_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        return (v_crab_con + v_diff_con, w_diff_con)
     def get_radius_of_rotation(self,v,w):
         try:
             radius = v / w
@@ -188,7 +221,7 @@ class Rap_controller():
         # Get current theta
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2])
                                         - self.normalize_angle(self.big_car_xyt[2]))
-        
+        '''
         #################
         ### DIFF MODE ###
         #################
@@ -215,16 +248,11 @@ class Rap_controller():
             # Get v_out, w_out
             # if self.Vc != 0:
             (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
-            '''
-            if abs(R) < 0.1:  # TODO 
-                (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
-            else:
-                (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
-            '''
             # Reverse follower heading velocity
             if ROLE == "follower":
                 self.v_out = -self.v_out
-        
+        '''
+        '''
         #################
         ### CRAB MODE ###
         #################
@@ -234,10 +262,10 @@ class Rap_controller():
                 self.ref_ang = atan2(self.Vy, self.Vc)
             elif self.Vc < 0: # Go backward
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
-            
             # Get error
             if ROLE == "follower":
                 self.ref_ang += pi
+
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
             # Get v_out, w_out
@@ -246,6 +274,39 @@ class Rap_controller():
             # Reverse follower heading velocity
             if ROLE == "follower":
                 self.v_out = -self.v_out
+        '''
+        ################
+        ### MIX MODE ###
+        ################
+        # Get refenrence angle
+        # Crab
+        if self.Vc >= 0: # Go forward
+            ref_ang_crab = atan2(self.Vy, self.Vc)
+        elif self.Vc < 0: # Go backward
+            ref_ang_crab = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
+        # Diff
+        R = self.get_radius_of_rotation(sqrt(self.Vc**2 + self.Vy**2), self.Wc)
+        ref_ang_diff = atan2(TOW_CAR_LENGTH/2.0, abs(R))
+        if not self.is_same_sign(R, self.Vc):
+            ref_ang_diff *= -1
+        if ROLE == "leader":
+            self.ref_ang = ref_ang_crab + ref_ang_diff
+        elif ROLE == "follower":
+            self.ref_ang = self.normalize_angle(pi + ref_ang_crab - ref_ang_diff)
+
+
+        # Get error
+        error_theta = self.normalize_angle(self.ref_ang - self.theta)
+
+        # Controller
+        (self.v_crab, self.w_crab) = self.crab_controller(self.Vc, self.Vy, error_theta)
+        (self.v_diff, self.w_diff) = self.diff_mix_controller(self.Vc, self.Vy , self.Wc, error_theta, self.ref_ang)
+        self.v_out = self.v_crab + self.v_diff
+        self.w_out = self.w_crab + self.w_diff
+        # Reverse follower heading velocity
+        if ROLE == "follower":
+            self.v_out *= -1
+        # (self.v_out, self.w_out) = self.mix_controller(self.Vc, self.Vy, self.Wc, error_theta)
 
         # Saturation velocity, for safty
         self.v_out = self.saturation(self.v_out, V_MAX)
