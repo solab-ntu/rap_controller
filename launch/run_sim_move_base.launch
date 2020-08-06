@@ -9,7 +9,7 @@
         <param name="role" value="leader"/>
         <param name="sim" value="$(arg sim)"/>
         <param name="ctl_frequency" value="30"/>
-        <param name="reverse_omega" value="true"/>
+        <param name="reverse_omega" value="false"/>
         <remap from="/car1/cmd_vel" to="/cmd_vel_car1"/>
         <remap from="/car1/naive_cmd" to="/cmd_vel"/>
     </node>
@@ -17,7 +17,7 @@
         <param name="robot_name" value="car2"/>
         <param name="role" value="follower"/>
         <param name="sim" value="$(arg sim)"/>
-        <param name="reverse_omega" value="true"/>
+        <param name="reverse_omega" value="false"/>
         <param name="ctl_frequency" value="30"/>
         <remap from="/car2/cmd_vel" to="/cmd_vel_car2"/>
         <remap from="/car2/naive_cmd" to="/cmd_vel"/>
