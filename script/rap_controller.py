@@ -30,7 +30,7 @@ class Rap_controller():
         rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
         # Publisher
         self.pub_cmd_vel = rospy.Publisher("/"+robot_name+'/cmd_vel', Twist,queue_size = 1,latch=False)
-        self.pub_marker_line = rospy.Publisher("/"+robot_name+'/marker_line', MarkerArray,queue_size = 1,latch=False)
+        self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
         # Parameters
         self.robot_name = robot_name
         self.role = role
@@ -266,11 +266,11 @@ class Rap_controller():
         p1 = self.base_link_xyt[:2]
         p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.big_car_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.big_car_xyt[2]))
-        set_line([p1, p2], RGB = (255,138,189), size = 0.02 ,id = 0)
+        set_line([p1, p2], RGB = (0,0,255), size = 0.02 ,id = 0)
         # Current ang
         p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.base_link_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.base_link_xyt[2]))
-        set_line([p1, p2], RGB = (255,0,0), size = 0.02 ,id = 1)
+        set_line([p1, p2], RGB = (102,178,255), size = 0.02 ,id = 1)
         
         # Set publish flag
         return True
