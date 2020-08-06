@@ -21,21 +21,16 @@ W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
 KI = 0
-# Global variable
-MARKER_LINE = MarkerArray()# Line markers show on RVIZ
 
 class Rap_controller():
-    def __init__(self,robot_name, role, sim, ctl_frequency):
+    def __init__(self):
         # Subscriber
-        rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
+        rospy.Subscriber("/"+ROBOT_NAME+"/"+"naive_cmd", Twist, self.cmd_cb)
         # Publisher
-        self.pub_cmd_vel = rospy.Publisher("/"+robot_name+'/cmd_vel', Twist,queue_size = 1,latch=False)
-        self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
+        self.pub_cmd_vel = rospy.Publisher("/"+ROBOT_NAME+'/cmd_vel', Twist,queue_size = 1,latch=False)
+        self.pub_marker_line = rospy.Publisher("/"+ROBOT_NAME+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
         # Parameters
-        self.robot_name = robot_name
-        self.role = role
-        self.sim = sim
-        self.dt = 1.0 / ctl_frequency
+        self.dt = 1.0 / CONTROL_FREQ
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
@@ -51,7 +46,7 @@ class Rap_controller():
         self.v_out = None
         self.w_out = None
         # Flags
-        self.mode = "diff" # "crab"
+        self.mode = "diff" # "crab" # TODO get rid of mode 
         # PID
         self.cmd_last = 0
         self.error_last = 0 
@@ -179,14 +174,19 @@ class Rap_controller():
             False - Can't finish calculation, don't publish
         '''
         # Update tf
-        if self.sim:
-            t_base_link = self.get_tf("map", self.robot_name)
+        '''
+        if SIM:
+            t_base_link = self.get_tf("map", ROBOT_NAME)
             t_big_car   = self.get_tf("map", "base_link")
         else:
-            t_base_link = self.get_tf(self.robot_name + "/map",
-                          self.robot_name + "/base_link")
-            t_big_car   = self.get_tf(self.robot_name + "/map",
-                          self.robot_name + "/center_big_car")
+            t_base_link = self.get_tf(ROBOT_NAME + "/map",
+                          ROBOT_NAME + "/base_link")
+            t_big_car   = self.get_tf(ROBOT_NAME + "/map",
+                          ROBOT_NAME + "/center_big_car")
+        '''
+        t_base_link = self.get_tf(MAP_FRAME, BASE_LINK_FRAME)
+        t_big_car   = self.get_tf(MAP_FRAME, BIG_CAR_FRAME)
+
         if t_base_link != None:
             self.base_link_xyt = t_base_link
         if t_big_car != None:
@@ -218,7 +218,7 @@ class Rap_controller():
                     self.ref_ang *= -1
             
             # Get error
-            if self.role == "follower":
+            if ROLE == "follower":
                 self.ref_ang = self.normalize_angle(pi - self.ref_ang)
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
@@ -232,7 +232,7 @@ class Rap_controller():
                 (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
             '''
             # Reverse follower heading velocity
-            if self.role == "follower":
+            if ROLE == "follower":
                 self.v_out = -self.v_out
         
         #################
@@ -246,7 +246,7 @@ class Rap_controller():
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
             
             # Get error
-            if self.role == "follower":
+            if ROLE == "follower":
                 self.ref_ang += pi
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
@@ -254,7 +254,7 @@ class Rap_controller():
             (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
             
             # Reverse follower heading velocity
-            if self.role == "follower":
+            if ROLE == "follower":
                 self.v_out = -self.v_out
 
         # Saturation velocity, for safty
@@ -264,13 +264,13 @@ class Rap_controller():
         # Set marker line
         # Reference ang
         p1 = self.base_link_xyt[:2]
-        p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.ref_ang + self.big_car_xyt[2]),
-              p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.ref_ang + self.big_car_xyt[2]))
-        set_line([p1, p2], "/" + str(self.robot_name) + "/map", RGB = (0,0,255), size = 0.02 ,id = 0)
+        p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.ref_ang + self.big_car_xyt[2]),
+              p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.ref_ang + self.big_car_xyt[2]))
+        set_line([p1, p2], RGB = (0,0,255), size = 0.03 ,id = 0)
         # Current ang
-        p2 = (p1[0] + TOW_CAR_LENGTH/2.0 * cos(self.base_link_xyt[2]),
-              p1[1] + TOW_CAR_LENGTH/2.0 * sin(self.base_link_xyt[2]))
-        set_line([p1, p2], "/" + str(self.robot_name) + "/map", RGB = (102,178,255), size = 0.02 ,id = 1)
+        p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.base_link_xyt[2]),
+              p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.base_link_xyt[2]))
+        set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 1)
         
         # Set publish flag
         return True
@@ -339,7 +339,7 @@ class Rap_controller():
 #######################
 ### Global function ###
 #######################
-def set_line(points, frame_id, RGB = None , size = 0.2, id = 0):
+def set_line(points, RGB = None , size = 0.2, id = 0):
     '''
     Set line at MarkArray
     Input : 
@@ -350,7 +350,7 @@ def set_line(points, frame_id, RGB = None , size = 0.2, id = 0):
     '''
     global MARKER_LINE
     marker = Marker()
-    marker.header.frame_id = frame_id
+    marker.header.frame_id = MAP_FRAME
     marker.id = id
     marker.ns = "tiles"
     marker.header.stamp = rospy.get_rostime()
@@ -376,18 +376,21 @@ def set_line(points, frame_id, RGB = None , size = 0.2, id = 0):
         marker.points.append(p)
     MARKER_LINE.markers.append(marker)
 
-def main(args):
-    global MARKER_LINE
+if __name__ == '__main__':
     rospy.init_node('rap_controller',anonymous=False)
-    # Get global parameters
-    ROBOT_NAME = rospy.get_param(param_name="~robot_name", default="car1")
-    ROLE = rospy.get_param(param_name="~role", default="leader")
-    SIM  = rospy.get_param(param_name="~sim", default="false")
+    # Get launch file parameters
+    ROBOT_NAME    = rospy.get_param(param_name="~robot_name", default="car1")
+    ROLE          = rospy.get_param(param_name="~role", default="leader")
+    SIM           = rospy.get_param(param_name="~sim", default="false")
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
-    CONTROL_FREQ = rospy.get_param(param_name="~ctl_frequency", default="10")
-    
+    CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
+    MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
+    BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
+    BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
+    # Global variable
+    MARKER_LINE = MarkerArray()# Line markers show on RVIZ
     # Init naive controller
-    rap_controller = Rap_controller(ROBOT_NAME, ROLE,SIM, CONTROL_FREQ)
+    rap_controller = Rap_controller()
     
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
@@ -402,13 +405,7 @@ def main(args):
             # Publish marker, for debug
             rap_controller.pub_marker_line.publish(MARKER_LINE)
             # Debug print
-            rospy.logdebug(rap_controller.role + " : V=" + str(round(rap_controller.v_out, 3)) +
-                                                 ", W=" + str(round(rap_controller.w_out, 3)))
+            rospy.logdebug(ROLE + " : V=" + str(round(rap_controller.v_out, 3)) +
+                                  ", W=" + str(round(rap_controller.w_out, 3)))
             MARKER_LINE = MarkerArray()
         rate.sleep()
-
-if __name__ == '__main__':
-    try:
-       main(sys.argv)
-    except rospy.ROSInterruptException:
-        pass
