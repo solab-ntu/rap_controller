@@ -10,7 +10,7 @@ from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from geometry_msgs.msg import Point
 
-import time # for testing 
+import time # for testing
 
 #########################
 ### Global parameters ###
@@ -37,21 +37,21 @@ class Rap_controller():
         self.base_link_xyt = None # (x,y,theta)
         self.big_car_xyt = None  # (x,y,theta)
         self.theta = None
-        # Kinematics 
+        # Kinematics
         self.Vc = 0
         self.Vy = 0
         self.Wc = 0
         self.ref_ang = 0
-        # Output 
+        # Output
         self.v_out = None
         self.w_out = None
         # Flags
-        self.mode = "diff" # "crab" # TODO get rid of mode 
+        self.mode = "diff" # "crab" # TODO get rid of mode
         # PID
         self.cmd_last = 0
-        self.error_last = 0 
+        self.error_last = 0
         self.sum_term = 0
-    
+
     def sim_theta_cb(self, data):
         '''
         Get theta from topics
@@ -61,7 +61,7 @@ class Rap_controller():
     def cmd_cb(self,data):
         '''
         Topic /<robot_name>/cmd_vel callback function
-        Argument: 
+        Argument:
             data - geometry_msgs/Twist
             geometry_msgs/Vector3 linear
                 float64 x
@@ -76,11 +76,11 @@ class Rap_controller():
         self.Vy = data.linear.y
         self.Wc = data.angular.z
         self.ref_ang = data.angular.x
-        if data.angular.y == 0: # TODO get rid of mode 
+        if data.angular.y == 0: # TODO get rid of mode
             self.mode = "diff"
-        else: 
+        else:
             self.mode = "crab"
-    
+
     def normalize_angle(self,angle):
         '''
         Make angle inside range [-pi, pi]
@@ -95,10 +95,10 @@ class Rap_controller():
         elif ans > pi: # [pi, 2pi]
             ans -= 2*pi
         return ans
-    
+
     def sign(self, value):
         if value >= 0:
-            return 1 
+            return 1
         if value < 0:
             return -1
 
@@ -109,13 +109,13 @@ class Rap_controller():
         #cmd = self.cmd_last + error*kp + (kp-ki*DT)*self.error_last
         #self.cmd_last = cmd
         #self.error_last = error
-        
+
         # Doris suggestion
         # self.sum_term = kp*ki*DT*error * 0.05 + self.sum_term * 0.95
         self.sum_term += kp*ki*self.dt*error
         cmd = kp*error + self.sum_term
         return cmd
-    
+
     def crab_controller(self,vx,vy,error):
         '''
         Return leader crab controller result
@@ -124,7 +124,7 @@ class Rap_controller():
         # w = KP_crab*error
         w_con = self.pi_controller(KP_crab, KI, error)
         return (v_con, w_con)
-    
+
     def diff_controller(self,vx,wz,error,ref_ang):
         '''
         Return leader crab controller result
@@ -144,7 +144,7 @@ class Rap_controller():
                     v_con *= -1
                 w_con = self.sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         return (v_con, w_con)
-    
+
     def rota_controller(self,wz,error,ref_ang):
         '''
         Inplace rotation controller
@@ -162,7 +162,7 @@ class Rap_controller():
         except ZeroDivisionError:
             return float("inf")
         else:
-            return radius 
+            return radius
 
     def run_once(self):
         '''
@@ -179,14 +179,14 @@ class Rap_controller():
             self.base_link_xyt = t_base_link
         if t_big_car != None:
             self.big_car_xyt = t_big_car
-        
+
         if self.base_link_xyt == None or self.big_car_xyt == None: #tf is invalid
             return False
-        
+
         # Get current theta
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2])
                                         - self.normalize_angle(self.big_car_xyt[2]))
-        
+
         #################
         ### DIFF MODE ###
         #################
@@ -197,13 +197,13 @@ class Rap_controller():
             if not self.is_same_sign(R, self.Vc):
                 self.ref_ang *= -1
             # if self.Vc == 0:# In-place rotation
-            
-            if abs(R) < 0.1:  # TODO 
+
+            if abs(R) < 0.1:  # TODO
                 # Choose a nearest ref_ang to prsue, two possibility: (-pi/2, pi/2)
                 if  abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta) and\
                     self.theta < -0.2:
                     self.ref_ang *= -1
-            
+
             # Get error
             if ROLE == "follower":
                 self.ref_ang = self.normalize_angle(pi - self.ref_ang)
@@ -213,7 +213,7 @@ class Rap_controller():
             # if self.Vc != 0:
             (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
             '''
-            if abs(R) < 0.1:  # TODO 
+            if abs(R) < 0.1:  # TODO
                 (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
             else:
                 (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
@@ -221,7 +221,7 @@ class Rap_controller():
             # Reverse follower heading velocity
             if ROLE == "follower":
                 self.v_out = -self.v_out
-        
+
         #################
         ### CRAB MODE ###
         #################
@@ -231,7 +231,7 @@ class Rap_controller():
                 self.ref_ang = atan2(self.Vy, self.Vc)
             elif self.Vc < 0: # Go backward
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
-            
+
             # Get error
             if ROLE == "follower":
                 self.ref_ang += pi
@@ -239,7 +239,7 @@ class Rap_controller():
 
             # Get v_out, w_out
             (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
-            
+
             # Reverse follower heading velocity
             if ROLE == "follower":
                 self.v_out = -self.v_out
@@ -247,7 +247,7 @@ class Rap_controller():
         # Saturation velocity, for safty
         self.v_out = self.saturation(self.v_out, V_MAX)
         self.w_out = self.saturation(self.w_out, W_MAX)
-        
+
         # Set marker line
         # Reference ang
         p1 = self.base_link_xyt[:2]
@@ -258,7 +258,7 @@ class Rap_controller():
         p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.base_link_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.base_link_xyt[2]))
         set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 1)
-        
+
         # Set publish flag
         return True
 
@@ -284,11 +284,11 @@ class Rap_controller():
 
     def is_same_sign(self, a, b):
         '''
-        Check whether a,b are same sign 
+        Check whether a,b are same sign
         arguments:
             a - float/int
             b - float/int
-        Return: 
+        Return:
             Bool - True means a,b have same sign, False means they don't
         '''
         if (a >= 0 and b >= 0) or (a < 0 and b < 0):
@@ -329,7 +329,7 @@ class Rap_controller():
 def set_line(points, RGB = None , size = 0.2, id = 0):
     '''
     Set line at MarkArray
-    Input : 
+    Input :
         points = [p1,p2....]
         RGB - tuple : (255,255,255)
         size - float: width of line
@@ -347,11 +347,11 @@ def set_line(points, RGB = None , size = 0.2, id = 0):
     marker.scale.y = size
     marker.scale.z = size
     marker.color.a = 1.0
-    if RGB == None : 
+    if RGB == None :
         marker.color.r = random.randint(0,255) / 255.0
         marker.color.g = random.randint(0,255) / 255.0
         marker.color.b = random.randint(0,255) / 255.0
-    else: 
+    else:
         marker.color.r = RGB[0]/255.0
         marker.color.g = RGB[1]/255.0
         marker.color.b = RGB[2]/255.0
@@ -378,7 +378,7 @@ if __name__ == '__main__':
     MARKER_LINE = MarkerArray()# Line markers show on RVIZ
     # Init naive controller
     rap_controller = Rap_controller()
-    
+
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
         if rap_controller.run_once():
@@ -387,7 +387,12 @@ if __name__ == '__main__':
             cmd_vel.angular.z = rap_controller.w_out
             if REVERSE_OMEGA: # This is for weird simulation bug
                 cmd_vel.angular.z = -cmd_vel.angular.z
-            
+
+            if abs(cmd_vel.linear.x) > 1e-2:
+                if abs(cmd_vel.angular.z/cmd_vel.linear.x) > 5.0:
+                    cmd_vel.linear.x = 0.0
+                    rospy.loginfo("vx forced to 0.0")
+
             rap_controller.pub_cmd_vel.publish(cmd_vel)
             # Publish marker, for debug
             rap_controller.pub_marker_line.publish(MARKER_LINE)
