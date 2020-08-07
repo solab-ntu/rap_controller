@@ -129,7 +129,6 @@ class Rap_controller():
         '''
         Return leader crab controller result
         '''
-        print ("diff_controller")
         R = self.get_radius_of_rotation(vx, wz)
         if R == float("inf"):# Go straight
             v_con = vx
@@ -150,7 +149,6 @@ class Rap_controller():
         '''
         Inplace rotation controller
         '''
-        print ("rota_controller")
         v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error)) # TODO test
         # v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
         w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
@@ -198,7 +196,6 @@ class Rap_controller():
             self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
             if not self.is_same_sign(R, self.Vc):
                 self.ref_ang *= -1
-            print ("R = "  + str(R))
             # if self.Vc == 0:# In-place rotation
             
             if abs(R) < 0.1:  # TODO 
