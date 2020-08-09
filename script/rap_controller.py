@@ -391,7 +391,7 @@ if __name__ == '__main__':
             if abs(cmd_vel.linear.x) > 1e-2:
                 if abs(cmd_vel.angular.z/cmd_vel.linear.x) > 5.0:
                     cmd_vel.linear.x = 0.0
-                    rospy.loginfo("vx forced to 0.0")
+                    # rospy.loginfo("(vx, wz) = {0:+.3f} {1:+.3f}, force vx to 0.0".format(cmd_vel.linear.x, cmd_vel.angular.z))
 
             rap_controller.pub_cmd_vel.publish(cmd_vel)
             # Publish marker, for debug
