@@ -135,7 +135,7 @@ class Rap_controller():
             w_con = self.pi_controller(KP_diff, KI, error)
         else:
             v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
-            if abs(R) < 0.3:  # TODO
+            if abs(R) < 0.1:  # TODO
                 w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
                 if ref_ang < 0: # ref_ang == -pi/2
                     v_con *= -1
@@ -198,7 +198,7 @@ class Rap_controller():
                 self.ref_ang *= -1
             # if self.Vc == 0:# In-place rotation
 
-            if abs(R) < 0.3:  # TODO
+            if abs(R) < 2:  # TODO
                 # Choose a nearest ref_ang to prsue, two possibility: (-pi/2, pi/2)
                 if  abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta) and\
                     self.theta < -0.2:
