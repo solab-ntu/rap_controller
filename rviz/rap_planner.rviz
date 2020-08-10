@@ -25,7 +25,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: LaserScan merge
 Preferences:
   PromptSaveOnExit: true
 Visualization Manager:
@@ -76,6 +76,8 @@ Visualization Manager:
           Value: false
         car2_lidar_link:
           Value: false
+        map:
+          Value: true
         odom:
           Value: true
         wheel_car1_left_link:
@@ -92,7 +94,35 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        map:
+          odom:
+            base_link:
+              car1:
+                car1_back_ball_link:
+                  {}
+                car1_front_ball_link:
+                  {}
+                car1_imu_link:
+                  {}
+                car1_lidar_link:
+                  {}
+                wheel_car1_left_link:
+                  {}
+                wheel_car1_right_link:
+                  {}
+              car2:
+                car2_back_ball_link:
+                  {}
+                car2_front_ball_link:
+                  {}
+                car2_imu_link:
+                  {}
+                car2_lidar_link:
+                  {}
+                wheel_car2_left_link:
+                  {}
+                wheel_car2_right_link:
+                  {}
       Update Interval: 0
       Value: true
     - Alpha: 0.10000000149011612
@@ -488,7 +518,7 @@ Visualization Manager:
       Marker Topic: /car1/rap_angle_marker_line
       Name: car1_ref_ang
       Namespaces:
-        {}
+        tiles: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -496,7 +526,7 @@ Visualization Manager:
       Marker Topic: /car2/rap_angle_marker_line
       Name: car2_ref_ang
       Namespaces:
-        {}
+        tiles: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -554,7 +584,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -0.0149993309751153
+      Angle: -0.014999330043792725
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -564,11 +594,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 71.79541778564453
+      Scale: 147.61361694335938
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz)
-      X: 0.45168328285217285
-      Y: -0.7111415266990662
+      X: 1.361506700515747
+      Y: -0.5970248579978943
     Saved: ~
 Window Geometry:
   Displays:

@@ -17,13 +17,8 @@ from rap_controller import Rap_controller
 #########################
 ### Global parameters ###
 #########################
-TOW_CAR_LENGTH = 0.93 # meter, Length between two cars
-V_MAX = 0.3 # m/s, Max velocity
-W_MAX = 0.8 # rad/s, MAX angular velocity
-KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
-KP_diff = 1.5 # KP fro diff mode
-KI = 0
-LOOK_AHEAD_DIST = 0.5 # Look ahead distance
+LOOK_AHEAD_DIST = 0.8 # Look ahead distance
+GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
 
 class Rap_planner():
     def __init__(self):
@@ -96,9 +91,9 @@ class Rap_planner():
 
     def get_local_goal(self):
         '''
-        Return (x,y)
+        Return (x,y,theta)
+        if theta == None, then this goal don't have heading demand.
         '''
-
         if self.big_car_xyt == None or self.global_path == None:
             return 
         # Find a local goal on global_path
@@ -109,8 +104,21 @@ class Rap_planner():
             dy = pose.pose.position.y - self.big_car_xyt[1]
             d_dist = abs(dx**2 + dy**2 - LOOK_AHEAD_DIST**2)
             if d_dist < min_d_dist:
-                local_goal = (pose.pose.position.x, pose.pose.position.y)
+                local_goal = (pose.pose.position.x, pose.pose.position.y, None)
                 min_d_dist = d_dist
+        
+        # Get goal heading
+        # Currently only adjust heading on last goalstamped
+        if sqrt((self.global_path.poses[-1].pose.position.x - self.big_car_xyt[0])**2+
+                (self.global_path.poses[-1].pose.position.y - self.big_car_xyt[1])**2) < LOOK_AHEAD_DIST:
+            quaternion = (
+                self.global_path.poses[-1].pose.orientation.x,
+                self.global_path.poses[-1].pose.orientation.y,
+                self.global_path.poses[-1].pose.orientation.z,
+                self.global_path.poses[-1].pose.orientation.w)
+            (_,_,yaw) = tf.transformations.euler_from_quaternion(quaternion)
+            local_goal = (local_goal[0], local_goal[1], yaw)
+
         return local_goal
 
     def prune_global_path(self):
@@ -133,7 +141,7 @@ class Rap_planner():
         
         self.global_path.poses = self.global_path.poses[prune_point:]
         return True
-
+    
     def run_once(self):
         # Update tf
         t_big_car   = self.get_tf(MAP_FRAME, BIG_CAR_FRAME)
@@ -148,31 +156,42 @@ class Rap_planner():
         if local_goal == None:
             rospy.logdebug("[rap_planner] Can't get local goal from global path.")
             return False
-        
+
         # transform local goal to /base_link frame
         p_dif = (local_goal[0] - self.big_car_xyt[0],
                  local_goal[1] - self.big_car_xyt[1])
         t = self.big_car_xyt[2]
-        x_out = cos(t)*p_dif[0] + sin(t)*p_dif[1]
-        y_out =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
-        local_goal_base = (x_out, y_out)
+        x_goal = cos(t)*p_dif[0] + sin(t)*p_dif[1]
+        y_goal =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
         # Debug points
-        self.set_sphere(local_goal_base , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
+        self.set_sphere((x_goal, y_goal) , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
+
+        # Check goal reached 
+        if sqrt(x_goal**2 + y_goal**2) < GOAL_TOLERANCE:
+            self.v_out = 0
+            self.w_out = 0
+            self.global_path = None
+            rospy.loginfo("[rap_planner] Goal Reached")
+            return True
         
-        # TODO get self.vc,wc, No get R 
-        alpha = atan2(local_goal_base[1], local_goal_base[0])
-        print ("Alpha : " + str(alpha))
+        # Get alpha 
+        alpha = atan2(y_goal, x_goal)
+        if local_goal[2] != None:
+            beta  = normalize_angle( local_goal[2] - alpha + self.big_car_xyt[2])
+        else:
+            beta = 0
+
+
+        print (beta)
+        # Get R 
         R = sqrt( (tan(pi/2 - alpha)*LOOK_AHEAD_DIST/2)**2 + (LOOK_AHEAD_DIST/2.0)**2 )
-        
         if alpha < 0: # alpha = [0,-pi]
             R = -R
         
-        self.v_out = LOOK_AHEAD_DIST # /10.0 # TODO 
-        if abs(alpha) < pi/2: # Go forward
-            pass
-        else: # Go backward
-            self.v_out *= -1.0
+        self.v_out = sqrt(x_goal**2 + y_goal**2)
         self.w_out = self.v_out / R
+        if abs(alpha) > pi/2: # Go backward
+            self.v_out *= -1.0
         
         return True 
 
@@ -242,6 +261,28 @@ class Rap_planner():
         (marker.pose.position.x , marker.pose.position.y) = point
         self.marker_point.markers.append(marker)
 
+
+def sign(value):
+    if value >= 0:
+        return 1 
+    if value < 0:
+        return -1
+
+def normalize_angle(angle):
+    '''
+    Make angle inside range [-pi, pi]
+    Arguments:
+        angle - flaot
+    Return:
+        float
+    '''
+    ans = (abs(angle) % (2*pi))*sign(angle)
+    if ans < -pi: # [-2pi, -pi]
+        ans += 2*pi
+    elif ans > pi: # [pi, 2pi]
+        ans -= 2*pi
+    return ans
+
 if __name__ == '__main__':
     rospy.init_node('rap_planner',anonymous=False)
     # Get launch file parameters
@@ -270,8 +311,11 @@ if __name__ == '__main__':
             rap_ctl_leader.set_cmd(rap_planner.v_out, 0, rap_planner.w_out)
             rap_ctl_follower.set_cmd(rap_planner.v_out, 0, rap_planner.w_out)
             # Debug path
-            rap_planner.pub_global_path.publish(rap_planner.global_path)
+            if rap_planner.global_path != None:
+                rap_planner.pub_global_path.publish(rap_planner.global_path)
             rap_planner.pub_marker_point.publish(rap_planner.marker_point)
+            rap_planner.marker_point = MarkerArray()
+            rap_planner.marker_line = MarkerArray()
             
         if rap_ctl_leader.run_once(): 
             # Leader cmd vel 
