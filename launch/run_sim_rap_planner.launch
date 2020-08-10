@@ -2,16 +2,18 @@
 <launch>
     <arg name="sim" value="true"/>
     <arg name="gui" default="false"/>
+    <arg name="reverse_omega" default="false"/>
     <include file="$(find docking_sim)/launch/link.launch">
         <arg name="gui" value="$(arg gui)"/>
         <arg name="rviz_path" value="$(find rap_controller)/rviz/rap_planner.rviz"/>
     </include>
     <node pkg="rap_controller" type="rap_planner.py" name="rap_planner" output='screen'>
         <param name="sim" value="$(arg sim)"/>
-        <param name="reverse_omega" value="false"/>
+        <param name="reverse_omega" value="$(arg reverse_omega)"/>
         <param name="ctl_frequency" value="30"/>
         <param name="map_frame" value="map"/>
-        <param name="base_link_frame" value="car1"/>
+        <param name="base_frame_leader" value="car1"/>
+        <param name="base_frame_follower" value="car2"/>
         <param name="big_car_frame" value="base_link"/>
         <param name="cmd_topic_leader" value="/cmd_vel_car1"/>
         <param name="cmd_topic_follower" value="/cmd_vel_car2"/>

@@ -25,14 +25,24 @@ LEFT_ROTATION_SUPREMACY = 0.5 # radian
 INPLACE_ROTATION_R = 0.1  # meter
 
 class Rap_controller():
-    def __init__(self):
+    def __init__(self, robot_name,
+                 role, sim, control_freq,
+                 map_frame, base_link_frame, big_car_frame, cmd_vel_topic):
+        # Store argument
+        self.robot_name = robot_name
+        self.role = role
+        self.sim = sim
+        self.control_freq = control_freq
+        self.map_frame = map_frame
+        self.base_link_frame = base_link_frame
+        self.big_car_frame = big_car_frame
         # Subscriber
-        rospy.Subscriber("/"+ROBOT_NAME+"/"+"naive_cmd", Twist, self.cmd_cb)
+        rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
         # Publisher
-        self.pub_cmd_vel = rospy.Publisher("/"+ROBOT_NAME+'/cmd_vel', Twist,queue_size = 1,latch=False)
-        self.pub_marker_line = rospy.Publisher("/"+ROBOT_NAME+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
+        self.pub_cmd_vel = rospy.Publisher(cmd_vel_topic, Twist,queue_size = 1,latch=False)
+        self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
         # Parameters
-        self.dt = 1.0 / CONTROL_FREQ
+        self.dt = 1.0 / self.control_freq
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
@@ -53,7 +63,8 @@ class Rap_controller():
         self.cmd_last = 0
         self.error_last = 0 
         self.sum_term = 0
-    
+        # Markers
+        self.marker_line = MarkerArray()# Line markers show on RVIZ
     def sim_theta_cb(self, data):
         '''
         Get theta from topics
@@ -74,6 +85,7 @@ class Rap_controller():
                 float64 y - mode, 1 means differtial mode, 0 means crab mode
                 float64 z
         '''
+        '''
         self.Vc = data.linear.x
         self.Vy = data.linear.y
         self.Wc = data.angular.z
@@ -82,7 +94,14 @@ class Rap_controller():
             self.mode = "diff"
         else: 
             self.mode = "crab"
+        '''
+        self.set_cmd(data.linear.x, data.linear.y, data.angular.z)
     
+    def set_cmd(self, vx, vy, wc):
+        self.Vc = vx
+        self.Vy = vy
+        self.Wc = wc
+
     def normalize_angle(self,angle):
         '''
         Make angle inside range [-pi, pi]
@@ -174,8 +193,8 @@ class Rap_controller():
             False - Can't finish calculation, don't publish
         '''
         # Update tf
-        t_base_link = self.get_tf(MAP_FRAME, BASE_LINK_FRAME)
-        t_big_car   = self.get_tf(MAP_FRAME, BIG_CAR_FRAME)
+        t_base_link = self.get_tf(self.map_frame, self.base_link_frame)
+        t_big_car   = self.get_tf(self.map_frame, self.big_car_frame)
 
         if t_base_link != None:
             self.base_link_xyt = t_base_link
@@ -206,7 +225,7 @@ class Rap_controller():
                     self.ref_ang *= -1
             
             # Get error
-            if ROLE == "follower":
+            if self.role == "follower":
                 self.ref_ang = self.normalize_angle(pi - self.ref_ang)
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
@@ -220,7 +239,7 @@ class Rap_controller():
                 (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
             '''
             # Reverse follower heading velocity
-            if ROLE == "follower":
+            if self.role == "follower":
                 self.v_out = -self.v_out
         
         #################
@@ -234,7 +253,7 @@ class Rap_controller():
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
             
             # Get error
-            if ROLE == "follower":
+            if self.role == "follower":
                 self.ref_ang += pi
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
@@ -242,7 +261,7 @@ class Rap_controller():
             (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
             
             # Reverse follower heading velocity
-            if ROLE == "follower":
+            if self.role == "follower":
                 self.v_out = -self.v_out
 
         # Saturation velocity, for safty
@@ -254,11 +273,11 @@ class Rap_controller():
         p1 = self.base_link_xyt[:2]
         p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.ref_ang + self.big_car_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.ref_ang + self.big_car_xyt[2]))
-        set_line([p1, p2], RGB = (0,0,255), size = 0.03 ,id = 0)
+        self.set_line([p1, p2], RGB = (0,0,255), size = 0.03 ,id = 0)
         # Current ang
         p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.base_link_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.base_link_xyt[2]))
-        set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 1)
+        self.set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 1)
         
         # Set publish flag
         return True
@@ -324,45 +343,41 @@ class Rap_controller():
             euler = tf.transformations.euler_from_quaternion(quaternion)
             return (t.transform.translation.x, t.transform.translation.y, euler[2])
 
-#######################
-### Global function ###
-#######################
-def set_line(points, RGB = None , size = 0.2, id = 0):
-    '''
-    Set line at MarkArray
-    Input : 
-        points = [p1,p2....]
-        RGB - tuple : (255,255,255)
-        size - float: width of line
-        id - int
-    '''
-    global MARKER_LINE
-    marker = Marker()
-    marker.header.frame_id = MAP_FRAME
-    marker.id = id
-    marker.ns = "tiles"
-    marker.header.stamp = rospy.get_rostime()
-    marker.type = marker.LINE_STRIP
-    marker.action = marker.ADD
-    marker.scale.x = size
-    marker.scale.y = size
-    marker.scale.z = size
-    marker.color.a = 1.0
-    if RGB == None : 
-        marker.color.r = random.randint(0,255) / 255.0
-        marker.color.g = random.randint(0,255) / 255.0
-        marker.color.b = random.randint(0,255) / 255.0
-    else: 
-        marker.color.r = RGB[0]/255.0
-        marker.color.g = RGB[1]/255.0
-        marker.color.b = RGB[2]/255.0
-    marker.pose.orientation.w = 1.0
-    for i in points:
-        p = Point()
-        p.x = i[0]
-        p.y = i[1]
-        marker.points.append(p)
-    MARKER_LINE.markers.append(marker)
+    def set_line(self, points, RGB = None , size = 0.2, id = 0):
+        '''
+        Set line at MarkArray
+        Input : 
+            points = [p1,p2....]
+            RGB - tuple : (255,255,255)
+            size - float: width of line
+            id - int
+        '''
+        marker = Marker()
+        marker.header.frame_id = self.map_frame
+        marker.id = id
+        marker.ns = "tiles"
+        marker.header.stamp = rospy.get_rostime()
+        marker.type = marker.LINE_STRIP
+        marker.action = marker.ADD
+        marker.scale.x = size
+        marker.scale.y = size
+        marker.scale.z = size
+        marker.color.a = 1.0
+        if RGB == None : 
+            marker.color.r = random.randint(0,255) / 255.0
+            marker.color.g = random.randint(0,255) / 255.0
+            marker.color.b = random.randint(0,255) / 255.0
+        else: 
+            marker.color.r = RGB[0]/255.0
+            marker.color.g = RGB[1]/255.0
+            marker.color.b = RGB[2]/255.0
+        marker.pose.orientation.w = 1.0
+        for i in points:
+            p = Point()
+            p.x = i[0]
+            p.y = i[1]
+            marker.points.append(p)
+        self.marker_line.markers.append(marker)
 
 if __name__ == '__main__':
     rospy.init_node('rap_controller',anonymous=False)
@@ -375,11 +390,14 @@ if __name__ == '__main__':
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
     BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
     BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
+    CMD_VEL_TOPIC       = rospy.get_param(param_name="~cmd_vel_topic", default="/car1/cmd_vel")
     # Global variable
-    MARKER_LINE = MarkerArray()# Line markers show on RVIZ
-    # Init naive controller
-    rap_controller = Rap_controller()
     
+    # Init naive controller
+    rap_controller = Rap_controller(ROBOT_NAME, ROLE, SIM, CONTROL_FREQ, MAP_FRAME,
+                                    BASE_LINK_FRAME, BIG_CAR_FRAME, CMD_VEL_TOPIC)
+    
+
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
         if rap_controller.run_once():
@@ -391,9 +409,9 @@ if __name__ == '__main__':
             
             rap_controller.pub_cmd_vel.publish(cmd_vel)
             # Publish marker, for debug
-            rap_controller.pub_marker_line.publish(MARKER_LINE)
+            rap_controller.pub_marker_line.publish(rap_controller.marker_line)
             # Debug print
             rospy.logdebug(ROLE + " : V=" + str(round(rap_controller.v_out, 3)) +
                                   ", W=" + str(round(rap_controller.w_out, 3)))
-            MARKER_LINE = MarkerArray()
+            rap_controller.marker_line = MarkerArray()
         rate.sleep()
