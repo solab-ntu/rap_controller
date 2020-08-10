@@ -21,6 +21,8 @@ W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
 KI = 0
+LEFT_ROTATION_SUPREMACY = 0.5 # radian
+INPLACE_ROTATION_R = 0.1  # meter
 
 class Rap_controller():
     def __init__(self):
@@ -135,7 +137,7 @@ class Rap_controller():
             w_con = self.pi_controller(KP_diff, KI, error)
         else:
             v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
-            if abs(R) < 0.1:  # TODO
+            if abs(R) < INPLACE_ROTATION_R:# TODO
                 w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
                 if ref_ang < 0: # ref_ang == -pi/2
                     v_con *= -1
@@ -198,10 +200,9 @@ class Rap_controller():
                 self.ref_ang *= -1
             # if self.Vc == 0:# In-place rotation
             
-            if abs(R) < 0.1:  # TODO 
-                # Choose a nearest ref_ang to prsue, two possibility: (-pi/2, pi/2)
-                if  abs(self.ref_ang - self.theta) > abs(-self.ref_ang - self.theta) and\
-                    self.theta < -0.2:
+            if abs(R) < INPLACE_ROTATION_R:# in-place rotation
+                if abs(self.normalize_angle( self.ref_ang - self.theta)) -\
+                   abs(self.normalize_angle(-self.ref_ang - self.theta)) > LEFT_ROTATION_SUPREMACY:
                     self.ref_ang *= -1
             
             # Get error
@@ -213,7 +214,7 @@ class Rap_controller():
             # if self.Vc != 0:
             (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
             '''
-            if abs(R) < 0.1:  # TODO 
+            if abs(R) < INPLACE_ROTATION_R:  # TODO 
                 (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
             else:
                 (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
