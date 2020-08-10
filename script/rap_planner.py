@@ -34,6 +34,7 @@ class Rap_controller():
         self.pub_cmd_vel_follower = rospy.Publisher(CMD_TOPIC_FOLLOWER, Twist,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/rap_angle_marker_line", MarkerArray,queue_size = 1,latch=False)
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
+        self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
         # Parameters
         self.dt = 1.0 / CONTROL_FREQ
         # Tf listner
@@ -96,7 +97,6 @@ class Rap_controller():
             dx = pose.pose.position.x - self.big_car_xyt[0]
             dy = pose.pose.position.y - self.big_car_xyt[1]
             d_dist = abs(dx**2 + dy**2 - LOOK_AHEAD_DIST**2)
-            print (d_dist)
             if d_dist < min_d_dist:
                 local_goal = (pose.pose.position.x, pose.pose.position.y)
                 min_d_dist = d_dist
@@ -119,7 +119,11 @@ class Rap_controller():
             if d_dist < min_d_dist:
                 prune_point = idx# (pose.pose.position.x, pose.pose.position.y)
                 min_d_dist = d_dist
-        # TODO unfinished
+        
+        self.global_path.poses = self.global_path.poses[prune_point:]
+        return True
+        
+
     def normalize_angle(self,angle):
         '''
         Make angle inside range [-pi, pi]
@@ -222,27 +226,49 @@ class Rap_controller():
         if self.base_link_xyt == None or self.big_car_xyt == None: #tf is invalid
             return False
         
-        # TODO need to prune global path 
+        # TODO need to prune global path
+        self.prune_global_path()
         # Get Local goal
         local_goal = self.get_local_goal()
         if local_goal == None:
+            rospy.logwarn("[rap_planner] Can't get local goal from global path.")
             return False
-        print (local_goal)
-        set_sphere(local_goal , (0,255,255)  , 0.1, 0)
-        # TODO transform local goal to /base_link frame
-
+        
+        
+        # transform local goal to /base_link frame
+        p_dif = (local_goal[0] - self.base_link_xyt[0],
+                 local_goal[1] - self.base_link_xyt[1])
+        t = self.base_link_xyt[2]
+        x_out = cos(t)*p_dif[0] + sin(t)*p_dif[1]
+        y_out =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
+        local_goal_base = (x_out, y_out)
+        # Debug points
+        set_sphere(local_goal_base , BASE_LINK_FRAME, (0,255,255)  , 0.1, 0)
+        
         # TODO get self.vc,wc, No get R 
-
+        alpha = atan2(local_goal_base[1], local_goal_base[0])
+        print ("Alpha : " + str(alpha))
+        R = sqrt( (tan(pi/2 - alpha)*LOOK_AHEAD_DIST/2)**2 + (LOOK_AHEAD_DIST/2.0)**2 )
+        
+        if alpha < 0: # alpha = [0,-pi]
+            R = -R
+        
+        self.Vc = LOOK_AHEAD_DIST/10.0 # TODO 
+        if abs(alpha) < pi/2: # Go forward
+            pass
+        else: # Go backward
+            self.Vc *= -1.0
+        self.Wc = self.Vc / R
 
         # Get current theta
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2])
-                                        - self.normalize_angle(self.big_car_xyt[2]))
+                                         -self.normalize_angle(self.big_car_xyt[2]))
         
         #################
         ### DIFF MODE ###
         #################
         # Get refenrence angle
-        R = self.get_radius_of_rotation(self.Vc, self.Wc)
+        # R = self.get_radius_of_rotation(self.Vc, self.Wc)
         self.ref_ang_leader = atan2(TOW_CAR_LENGTH/2.0, abs(R))
         if not self.is_same_sign(R, self.Vc):
             self.ref_ang_leader *= -1
@@ -304,7 +330,7 @@ class Rap_controller():
         self.w_out_leader = self.saturation(self.w_out_leader, W_MAX)
         self.v_out_follower = self.saturation(self.v_out_follower, V_MAX)
         self.w_out_follower = self.saturation(self.w_out_follower, W_MAX)
-        
+        print ("V=" + str(self.v_out_leader)+ ", W=" + str(self.w_out_leader))
         # Set marker line
         # Reference ang
         p1 = self.base_link_xyt[:2]
@@ -315,7 +341,18 @@ class Rap_controller():
         p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.base_link_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.base_link_xyt[2]))
         set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 1)
-        
+        # Follower
+        '''
+        # Reference ang
+        p1 = self.base_link_xyt[:2]
+        p2 = (p1[0] - TOW_CAR_LENGTH/1.5 * cos(self.ref_ang_follower + self.big_car_xyt[2]),
+              p1[1] - TOW_CAR_LENGTH/1.5 * sin(self.ref_ang_follower + self.big_car_xyt[2]))
+        set_line([p1, p2], RGB = (0,0,255), size = 0.03 ,id = 2)
+        # Current ang
+        p2 = (p1[0] - TOW_CAR_LENGTH/1.5 * cos(self.base_link_xyt[2]),
+              p1[1] - TOW_CAR_LENGTH/1.5 * sin(self.base_link_xyt[2]))
+        set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 3)
+        '''
         # Set publish flag
         return True
 
@@ -420,7 +457,7 @@ def set_line(points, RGB = None , size = 0.2, id = 0):
         marker.points.append(p)
     MARKER_LINE.markers.append(marker)
 
-def set_sphere(point , RGB = None  , size = 0.05, id = 0):
+def set_sphere(point, frame_id , RGB = None  , size = 0.05, id = 0):
     '''
     Set Point at MarkArray 
     Input : 
@@ -429,7 +466,7 @@ def set_sphere(point , RGB = None  , size = 0.05, id = 0):
     '''
     global MARKER_POINT
     marker = Marker()
-    marker.header.frame_id = MAP_FRAME
+    marker.header.frame_id = frame_id
     marker.id = id
     marker.ns = "tiles"
     marker.header.stamp = rospy.get_rostime()
@@ -480,19 +517,20 @@ if __name__ == '__main__':
             rap_controller.pub_cmd_vel_leader.publish(cmd_vel)
 
             # Follower cmd vel 
-            cmd_vel = Twist()
-            cmd_vel.linear.x  = rap_controller.v_out_follower
-            cmd_vel.angular.z = rap_controller.w_out_follower
+            cmd_vel_follower = Twist()
+            cmd_vel_follower.linear.x  = rap_controller.v_out_follower
+            cmd_vel_follower.angular.z = rap_controller.w_out_follower
             if REVERSE_OMEGA: # This is for weird simulation bug
-                cmd_vel.angular.z = -cmd_vel.angular.z
+                cmd_vel_follower.angular.z = -cmd_vel_follower.angular.z
 
-            rap_controller.pub_cmd_vel_follower.publish(cmd_vel)
+            rap_controller.pub_cmd_vel_follower.publish(cmd_vel_follower)
             # Publish marker, for debug
             rap_controller.pub_marker_line.publish(MARKER_LINE)
             rap_controller.pub_marker_point.publish(MARKER_POINT)
             # Debug print
             # rospy.logdebug(ROLE + " : V=" + str(round(rap_controller.v_out, 3)) +
             #                       ", W=" + str(round(rap_controller.w_out, 3)))
+            rap_controller.pub_global_path.publish(rap_controller.global_path)
             MARKER_LINE = MarkerArray()
             MARKER_POINT = MarkerArray()
         rate.sleep()

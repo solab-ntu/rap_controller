@@ -8,12 +8,12 @@
     </include>
     <node pkg="rap_controller" type="rap_planner.py" name="rap_planner" output='screen'>
         <param name="sim" value="$(arg sim)"/>
-        <param name="reverse_omega" value="true"/>
+        <param name="reverse_omega" value="false"/>
         <param name="ctl_frequency" value="30"/>
         <param name="map_frame" value="map"/>
         <param name="base_link_frame" value="car1"/>
         <param name="big_car_frame" value="base_link"/>
-        <param name="cmd_topic_leader" value="/car1/cmd_vel"/>
-        <param name="cmd_topic_follower" value="/car2/cmd_vel"/>
+        <param name="cmd_topic_leader" value="/cmd_vel_car1"/>
+        <param name="cmd_topic_follower" value="/cmd_vel_car2"/>
     </node>
 </launch>
