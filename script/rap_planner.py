@@ -25,6 +25,7 @@ class Rap_planner():
         rospy.Subscriber("/move_base/GlobalPlanner/plan", Path, self.path_cb)
         self.global_path = None #
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
+        self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
         # 
         self.marker_point = MarkerArray()
@@ -177,25 +178,42 @@ class Rap_planner():
         # Get alpha 
         alpha = atan2(y_goal, x_goal)
         if local_goal[2] != None:
-            beta  = normalize_angle( local_goal[2] - alpha + self.big_car_xyt[2])
+            beta = normalize_angle(local_goal[2] - alpha - self.big_car_xyt[2])
         else:
             beta = 0
+        beta = 0 # TODO 
+        pursu_angle = alpha + beta
+        rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
+        
+        
+        self.set_line(((0,0), (0.3,0)), BIG_CAR_FRAME,
+                      RGB = (255,255,0), size = 0.02, id = 0)
+        self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
+                               sin(alpha)*LOOK_AHEAD_DIST,)),
+                      BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
+        if local_goal[2] != None:
+            self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
+                                              y_goal + sin(pursu_angle)*0.3)),
+                        BIG_CAR_FRAME, RGB = (255,0,255), size = 0.02, id = 2)
 
-
-        print (beta)
+        self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
+                         sin(pursu_angle)*LOOK_AHEAD_DIST,),
+                        BIG_CAR_FRAME, (255,0,255), 0.1, 1)
         # Get R 
-        R = sqrt( (tan(pi/2 - alpha)*LOOK_AHEAD_DIST/2)**2 + (LOOK_AHEAD_DIST/2.0)**2 )
-        if alpha < 0: # alpha = [0,-pi]
+        R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 + (LOOK_AHEAD_DIST/2.0)**2 )
+        # if alpha < 0: # alpha = [0,-pi]
+        if pursu_angle < 0: # alpha = [0,-pi]
             R = -R
         
         self.v_out = sqrt(x_goal**2 + y_goal**2)
         self.w_out = self.v_out / R
-        if abs(alpha) > pi/2: # Go backward
+        # if abs(alpha) > pi/2: # Go backward
+        if abs(pursu_angle) > pi/2: # Go backward
             self.v_out *= -1.0
         
         return True 
 
-    def set_line(self, points, RGB = None , size = 0.2, id = 0):
+    def set_line(self, points,frame_id, RGB = None , size = 0.2, id = 0):
         '''
         Set line at MarkArray
         Input : 
@@ -205,7 +223,7 @@ class Rap_planner():
             id - int
         '''
         marker = Marker()
-        marker.header.frame_id = MAP_FRAME
+        marker.header.frame_id = frame_id
         marker.id = id
         marker.ns = "tiles"
         marker.header.stamp = rospy.get_rostime()
@@ -314,10 +332,12 @@ if __name__ == '__main__':
             if rap_planner.global_path != None:
                 rap_planner.pub_global_path.publish(rap_planner.global_path)
             rap_planner.pub_marker_point.publish(rap_planner.marker_point)
+            rap_planner.pub_marker_line.publish(rap_planner.marker_line)
+            
             rap_planner.marker_point = MarkerArray()
             rap_planner.marker_line = MarkerArray()
             
-        if rap_ctl_leader.run_once(): 
+        if rap_ctl_leader.run_once():
             # Leader cmd vel 
             cmd_vel = Twist()
             cmd_vel.linear.x  = rap_ctl_leader.v_out
@@ -326,6 +346,7 @@ if __name__ == '__main__':
                 cmd_vel.angular.z = -cmd_vel.angular.z
             rap_ctl_leader.pub_cmd_vel.publish(cmd_vel)
             rap_ctl_leader.pub_marker_line.publish(rap_ctl_leader.marker_line)
+            rap_ctl_leader.marker_line = MarkerArray()
         
         if rap_ctl_follower.run_once():
             # Follower cmd vel 
@@ -336,4 +357,5 @@ if __name__ == '__main__':
                 cmd_vel.angular.z = -cmd_vel.angular.z
             rap_ctl_follower.pub_cmd_vel.publish(cmd_vel)
             rap_ctl_follower.pub_marker_line.publish(rap_ctl_follower.marker_line)
+            rap_ctl_follower.marker_line = MarkerArray()
         rate.sleep()

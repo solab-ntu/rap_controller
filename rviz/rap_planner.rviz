@@ -5,8 +5,9 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /TF1/Frames1
+        - /MarkerArray1
       Splitter Ratio: 0.5
-    Tree Height: 360
+    Tree Height: 749
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -534,19 +535,19 @@ Visualization Manager:
       Marker Topic: /local_goal
       Name: local_goal
       Namespaces:
-        {}
+        tiles: true
       Queue Size: 100
       Value: true
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
-      Color: 170; 0; 0
+      Color: 0; 255; 0
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
       Line Style: Billboards
-      Line Width: 0.029999999329447746
+      Line Width: 0.009999999776482582
       Name: prune_global_path
       Offset:
         X: 0
@@ -559,6 +560,14 @@ Visualization Manager:
       Shaft Length: 0.10000000149011612
       Topic: /rap_planner/global_path
       Unreliable: false
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /rap_planner/angles
+      Name: MarkerArray
+      Namespaces:
+        tiles: true
+      Queue Size: 100
       Value: true
   Enabled: true
   Global Options:
@@ -584,7 +593,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -0.014999330043792725
+      Angle: -0.014999327249825
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -594,11 +603,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 147.61361694335938
+      Scale: 146.55963134765625
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz)
-      X: 1.361506700515747
-      Y: -0.5970248579978943
+      X: 1.360504150390625
+      Y: 0.026946520432829857
     Saved: ~
 Window Geometry:
   Displays:
