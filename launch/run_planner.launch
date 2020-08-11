@@ -6,7 +6,7 @@
         <param name="map_frame" value="$(arg robot_name)/map"/>
         <param name="big_car_frame" value="$(arg robot_name)/center_big_car"/>
         <param name="global_path_topic" value="/$(arg robot_name)/move_base/GlobalPlanner/plan"/>
-        <param name="kp_vel" value="0.5"/>
+        <param name="kp_vel" value="0.2"/>
         <param name="look_ahead_dist" value="0.8"/>
         <param name="goal_tolerance" value="0.1"/>
     </node>
