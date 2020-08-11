@@ -64,6 +64,7 @@ class Rap_controller():
         self.sum_term = 0
         # Markers
         self.marker_line = MarkerArray()# Line markers show on RVIZ
+
     def sim_theta_cb(self, data):
         '''
         Get theta from topics
@@ -83,16 +84,6 @@ class Rap_controller():
                 float64 x - ref_ang
                 float64 y - mode, 1 means differtial mode, 0 means crab mode
                 float64 z
-        '''
-        '''
-        self.Vc = data.linear.x
-        self.Vy = data.linear.y
-        self.Wc = data.angular.z
-        self.ref_ang = data.angular.x
-        if data.angular.y == 0: # TODO get rid of mode 
-            self.mode = "diff"
-        else: 
-            self.mode = "crab"
         '''
         self.set_cmd(data.linear.x, data.linear.y, data.angular.z)
     
@@ -136,12 +127,15 @@ class Rap_controller():
         cmd = kp*error + self.sum_term
         return cmd
     
-    def crab_controller(self,vx,vy,error):
+    def crab_controller(self,vx,vy,error,is_forward):
         '''
         Return leader crab controller result
         '''
-        v_con = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
-        # w = KP_crab*error
+        # v_con = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
+        
+        v_con = sqrt(vx**2 + vy**2) * abs(cos(error))
+        if not is_forward:
+            v_con *= -1.0
         w_con = self.pi_controller(KP_crab, KI, error)
         return (v_con, w_con)
     
@@ -207,6 +201,13 @@ class Rap_controller():
         self.theta = self.normalize_angle(self.normalize_angle(self.base_link_xyt[2])
                                         - self.normalize_angle(self.big_car_xyt[2]))
         
+
+        # Decide whitch mode to use 
+        if self.Vc != 0.0 and self.Wc != 0.0:
+            self.mode = "diff"
+        else:
+            self.mode = "crab"
+
         #################
         ### DIFF MODE ###
         #################
@@ -246,9 +247,16 @@ class Rap_controller():
         #################
         elif self.mode == "crab":
             # Get refenrence angle
+            '''
             if self.Vc >= 0: # Go forward
                 self.ref_ang = atan2(self.Vy, self.Vc)
             elif self.Vc < 0: # Go backward
+                self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
+            '''
+            is_forward = True
+            self.ref_ang = atan2(self.Vy, self.Vc)
+            if self.ref_ang > 3*pi/4 or self.ref_ang < -3*pi/4: # Go backward
+                is_forward = False
                 self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
             
             # Get error
@@ -257,7 +265,7 @@ class Rap_controller():
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
             # Get v_out, w_out
-            (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta)
+            (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta, is_forward)
             
             # Reverse follower heading velocity
             if self.role == "follower":

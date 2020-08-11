@@ -18,6 +18,7 @@ from rap_controller import Rap_controller
 #########################
 LOOK_AHEAD_DIST = 0.8 # Look ahead distance
 GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
+CRAB_REGION = pi/6 # radian
 
 class Rap_planner():
     def __init__(self):
@@ -97,7 +98,7 @@ class Rap_planner():
         if theta == None, then this goal don't have heading demand.
         '''
         if self.big_car_xyt == None or self.global_path == None:
-            return 
+            return None
         # Find a local goal on global_path
         min_d_dist = float("inf")
         local_goal = None # (x,y)
@@ -109,6 +110,8 @@ class Rap_planner():
                 local_goal = (pose.pose.position.x, pose.pose.position.y, None)
                 min_d_dist = d_dist
         
+        if local_goal == None:
+            return None
         # Get goal heading
         # Currently only adjust heading on last goalstamped
         if sqrt((self.global_path.poses[-1].pose.position.x - self.big_car_xyt[0])**2+
@@ -178,6 +181,8 @@ class Rap_planner():
         
         # Get alpha 
         alpha = atan2(y_goal, x_goal)
+        
+        # Get beta
         if local_goal[2] != None:
             beta = normalize_angle(local_goal[2] - alpha - self.big_car_xyt[2])
             if abs(alpha) > pi/2:# Go backward
@@ -185,6 +190,8 @@ class Rap_planner():
         else:
             beta = 0
         beta = 0 # TODO
+        
+        # Get pursu_angle
         pursu_angle = alpha + beta
 
         rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
@@ -203,6 +210,8 @@ class Rap_planner():
         self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
                          sin(pursu_angle)*LOOK_AHEAD_DIST,),
                         BIG_CAR_FRAME, (255,0,255), 0.1, 1)
+        if abs(abs(alpha) - abs(pi/2)) < CRAB_REGION:
+            print ("Do crab things ")
         # Get R 
         R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
                   (LOOK_AHEAD_DIST/2.0)**2 )
@@ -210,7 +219,7 @@ class Rap_planner():
         if pursu_angle < 0: # alpha = [0,-pi]
             R = -R
         
-        self.v_out = sqrt(x_goal**2 + y_goal**2)
+        self.v_out = sqrt(x_goal**2 + y_goal**2) * KP_VEL
         self.w_out = self.v_out / R
         # if abs(alpha) > pi/2: # Go backward
         if abs(pursu_angle) > pi/2: # Go backward
@@ -318,6 +327,9 @@ if __name__ == '__main__':
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
     BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
     GLOBAL_PATH_TOPIC   = rospy.get_param(param_name="~global_path_topic", default="/move_base/GlobalPlanner/plan")
+    KP_VEL = rospy.get_param(param_name="~kp_vel", default="1")
+    LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
+    GOAL_TOLERANCE = rospy.get_param(param_name="~goal_tolerance", default="0.1")
     # Global variable
     
     # Init naive controller

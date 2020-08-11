@@ -42,20 +42,20 @@
         <param name="wz_max" value="0.5"/>
         
         <!-- pepelepew's joystick setting-->
-        <!-- <param name="vx_axe" value="3"/>
+        <param name="vx_axe" value="3"/>
         <param name="vy_axe" value="2"/>
         <param name="wz_axe" value="0"/>
         <param name="switch_mode_button" value="1"/> 
         <param name="speed_axe" value="5"/>
-        <param name="turn_axe" value="4"/> -->
+        <param name="turn_axe" value="4"/>
         
         <!-- Spiderkilller's joystick setting-->
-        <param name="vx_axe" value="4"/>
+        <!-- <param name="vx_axe" value="4"/>
         <param name="vy_axe" value="3"/>
         <param name="wz_axe" value="0"/>
         <param name="speed_axe" value="7"/>
         <param name="turn_axe" value="6"/>
-        <param name="switch_mode_button" value="0"/>
+        <param name="switch_mode_button" value="0"/> -->
     </node>
 
     <!--node pkg="rviz" type="rviz" name="rviz" args="-d $(find ros_pkg_example)/rviz/default.rviz" if="$(arg use_rviz)" /-->
