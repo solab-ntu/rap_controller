@@ -314,7 +314,6 @@ def normalize_angle(angle):
 if __name__ == '__main__':
     rospy.init_node('rap_planner',anonymous=False)
     # Get launch file parameters
-    SIM           = rospy.get_param(param_name="~sim", default="false")
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
     BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")

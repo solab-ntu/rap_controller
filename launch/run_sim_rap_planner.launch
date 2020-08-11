@@ -10,7 +10,6 @@
     </include>
     
     <node pkg="rap_controller" type="rap_planner.py" name="rap_planner" output='screen'>
-        <param name="sim" value="$(arg sim)"/>
         <param name="ctl_frequency" value="30"/>
         <param name="map_frame" value="map"/>
         <param name="big_car_frame" value="base_link"/>

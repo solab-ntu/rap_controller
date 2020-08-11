@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="robot_name" default="car1"/>
+    <node pkg="rap_controller" type="rap_planner.py" name="rap_planner" output='screen'>
+        <param name="ctl_frequency" value="30"/>
+        <param name="map_frame" value="$(arg robot_name)/map"/>
+        <param name="big_car_frame" value="$(arg robot_name)/center_big_car"/>
+    </node>
+</launch>
