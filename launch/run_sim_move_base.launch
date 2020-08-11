@@ -2,15 +2,13 @@
 <launch>
 
     <arg name="sim" value="true"/>
-    <arg name="gui" default="false"/>
+    <arg name="gui" default="true"/>
 
+    <!-- <include file="$(find docking_sim)/launch/link_nomap.launch"> -->
+    <!-- <include file="$(find docking_sim)/launch/link_nomap_fake.launch"> -->
     <include file="$(find docking_sim)/launch/link.launch">
         <arg name="gui" value="$(arg gui)"/>
     </include>
-
-    <!-- <include file="$(find docking_sim)/launch/link_nomap.launch">
-        <arg name="gui" value="$(arg gui)"/>
-    </include> -->
 
     <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car1" output='screen'>
         <param name="robot_name" value="car1"/>
