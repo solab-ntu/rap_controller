@@ -21,7 +21,7 @@ GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL
 
 class Rap_planner():
     def __init__(self):
-        rospy.Subscriber("/move_base/GlobalPlanner/plan", Path, self.path_cb)
+        rospy.Subscriber(GLOBAL_PATH_TOPIC, Path, self.path_cb)
         self.global_path = None #
         self.pub_rap_cmd_car1 = rospy.Publisher("/car1/rap_cmd", Twist,queue_size = 1,latch=False)
         self.pub_rap_cmd_car2 = rospy.Publisher("/car2/rap_cmd", Twist,queue_size = 1,latch=False)
@@ -317,6 +317,7 @@ if __name__ == '__main__':
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
     BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
+    GLOBAL_PATH_TOPIC   = rospy.get_param(param_name="~global_path_topic", default="/move_base/GlobalPlanner/plan")
     # Global variable
     
     # Init naive controller
