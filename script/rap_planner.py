@@ -179,10 +179,13 @@ class Rap_planner():
         alpha = atan2(y_goal, x_goal)
         if local_goal[2] != None:
             beta = normalize_angle(local_goal[2] - alpha - self.big_car_xyt[2])
+            if abs(alpha) > pi/2:# Go backward
+                beta = normalize_angle(beta - pi)
         else:
             beta = 0
-        beta = 0 # TODO 
+        beta = 0 # TODO
         pursu_angle = alpha + beta
+
         rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
         
         
@@ -200,7 +203,8 @@ class Rap_planner():
                          sin(pursu_angle)*LOOK_AHEAD_DIST,),
                         BIG_CAR_FRAME, (255,0,255), 0.1, 1)
         # Get R 
-        R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 + (LOOK_AHEAD_DIST/2.0)**2 )
+        R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
+                  (LOOK_AHEAD_DIST/2.0)**2 )
         # if alpha < 0: # alpha = [0,-pi]
         if pursu_angle < 0: # alpha = [0,-pi]
             R = -R
