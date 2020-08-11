@@ -33,8 +33,9 @@ class Rap_planner():
         self.marker_point = MarkerArray()
         self.marker_line = MarkerArray()# Line markers show on RVIZ
         # Output
-        self.v_out = None
-        self.w_out = None
+        self.vx_out = None
+        self.vy_out = None
+        self.wz_out = None
         # tf 
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
@@ -173,8 +174,9 @@ class Rap_planner():
 
         # Check goal reached 
         if sqrt(x_goal**2 + y_goal**2) < GOAL_TOLERANCE:
-            self.v_out = 0
-            self.w_out = 0
+            self.vx_out = 0
+            self.vy_out = 0
+            self.wz_out = 0
             self.global_path = None
             rospy.loginfo("[rap_planner] Goal Reached")
             return True
@@ -211,20 +213,26 @@ class Rap_planner():
                          sin(pursu_angle)*LOOK_AHEAD_DIST,),
                         BIG_CAR_FRAME, (255,0,255), 0.1, 1)
         if abs(abs(alpha) - abs(pi/2)) < CRAB_REGION:
-            print ("Do crab things ")
-        # Get R 
-        R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
-                  (LOOK_AHEAD_DIST/2.0)**2 )
-        # if alpha < 0: # alpha = [0,-pi]
-        if pursu_angle < 0: # alpha = [0,-pi]
-            R = -R
-        
-        self.v_out = sqrt(x_goal**2 + y_goal**2) * KP_VEL
-        self.w_out = self.v_out / R
-        # if abs(alpha) > pi/2: # Go backward
-        if abs(pursu_angle) > pi/2: # Go backward
-            self.v_out *= -1.0
-        
+            print ("CRAB MODE")
+            self.vx_out = cos(alpha) * KP_VEL
+            self.vy_out = sin(alpha) * KP_VEL
+            self.wz_out = 0.0
+        else:
+            print ("DIFF MODE")
+            # Get R 
+            R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
+                    (LOOK_AHEAD_DIST/2.0)**2 )
+            # if alpha < 0: # alpha = [0,-pi]
+            if pursu_angle < 0: # alpha = [0,-pi]
+                R = -R
+            
+            self.vx_out = sqrt(x_goal**2 + y_goal**2) * KP_VEL
+            self.vy_out = 0.0
+            self.wz_out = self.vx_out / R
+            # if abs(alpha) > pi/2: # Go backward
+            if abs(pursu_angle) > pi/2: # Go backward
+                self.vx_out *= -1.0
+
         return True 
 
     def set_line(self, points,frame_id, RGB = None , size = 0.2, id = 0):
@@ -341,8 +349,9 @@ if __name__ == '__main__':
         if rap_planner.run_once():
             # Publish rap_cmd to rap_controller
             cmd_vel = Twist()
-            cmd_vel.linear.x  = rap_planner.v_out
-            cmd_vel.angular.z = rap_planner.w_out
+            cmd_vel.linear.x = rap_planner.vx_out
+            cmd_vel.linear.y = rap_planner.vy_out
+            cmd_vel.angular.z = rap_planner.wz_out
             rap_planner.pub_rap_cmd_car1.publish(cmd_vel)
             rap_planner.pub_rap_cmd_car2.publish(cmd_vel)
 

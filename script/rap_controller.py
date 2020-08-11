@@ -57,7 +57,7 @@ class Rap_controller():
         self.v_out = None
         self.w_out = None
         # Flags
-        self.mode = "diff" # "crab" # TODO get rid of mode 
+        self.mode = "diff"
         # PID
         self.cmd_last = 0
         self.error_last = 0 
@@ -132,8 +132,10 @@ class Rap_controller():
         Return leader crab controller result
         '''
         # v_con = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
-        
-        v_con = sqrt(vx**2 + vy**2) * abs(cos(error))
+        if abs(error) < pi/18.0: # If error too big , v = 0, don't move
+            v_con = sqrt(vx**2 + vy**2) * abs(cos(error)) # Don't move until ang is OK
+        else:
+            v_con = 0.0
         if not is_forward:
             v_con *= -1.0
         w_con = self.pi_controller(KP_crab, KI, error)
@@ -247,12 +249,6 @@ class Rap_controller():
         #################
         elif self.mode == "crab":
             # Get refenrence angle
-            '''
-            if self.Vc >= 0: # Go forward
-                self.ref_ang = atan2(self.Vy, self.Vc)
-            elif self.Vc < 0: # Go backward
-                self.ref_ang = self.normalize_angle(atan2(self.Vy, self.Vc) + pi)
-            '''
             is_forward = True
             self.ref_ang = atan2(self.Vy, self.Vc)
             if self.ref_ang > 3*pi/4 or self.ref_ang < -3*pi/4: # Go backward
