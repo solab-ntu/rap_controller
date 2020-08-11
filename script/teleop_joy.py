@@ -88,7 +88,7 @@ if __name__ == '__main__':
     MODE = "diff"
     rospy.loginfo("Switch to DIFF MODE")
 
-    PUB_CAR1 = rospy.Publisher(name="/car1/naive_cmd", data_class=Twist, queue_size=1)
-    PUB_CAR2 = rospy.Publisher(name="/car2/naive_cmd", data_class=Twist, queue_size=1)
+    PUB_CAR1 = rospy.Publisher(name="/car1/rap_cmd", data_class=Twist, queue_size=1)
+    PUB_CAR2 = rospy.Publisher(name="/car2/rap_cmd", data_class=Twist, queue_size=1)
     rospy.Subscriber(name="joy", data_class=Joy, callback=cb_joy, queue_size=1)
     rospy.spin()
