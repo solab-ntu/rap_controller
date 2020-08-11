@@ -4,12 +4,11 @@ import sys
 import tf2_ros
 import tf # conversion euler
 import random
-from geometry_msgs.msg import Twist # topic /cmd_vel
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
-from geometry_msgs.msg import Point
-from nav_msgs.msg import Path 
+from geometry_msgs.msg import Point, Twist
+from nav_msgs.msg import Path
 
 import time # for testing 
 from rap_controller import Rap_controller
@@ -24,6 +23,8 @@ class Rap_planner():
     def __init__(self):
         rospy.Subscriber("/move_base/GlobalPlanner/plan", Path, self.path_cb)
         self.global_path = None #
+        self.pub_rap_cmd_car1 = rospy.Publisher("/car1/rap_cmd", Twist,queue_size = 1,latch=False)
+        self.pub_rap_cmd_car2 = rospy.Publisher("/car2/rap_cmd", Twist,queue_size = 1,latch=False)
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
@@ -284,6 +285,11 @@ class Rap_planner():
         self.marker_point.markers.append(marker)
 
 
+#######################
+### Global function ###
+#######################
+
+
 def sign(value):
     if value >= 0:
         return 1 
@@ -310,56 +316,30 @@ if __name__ == '__main__':
     # Get launch file parameters
     SIM           = rospy.get_param(param_name="~sim", default="false")
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
-    REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
-    BASE_FRAME_LEADER   = rospy.get_param(param_name="~base_frame_leader", default="base_link")
-    BASE_FRAME_FOLLOWER = rospy.get_param(param_name="~base_frame_follower", default="base_link")
     BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
-    CMD_TOPIC_LEADER   = rospy.get_param(param_name="~cmd_topic_leader", default="/car1/cmd_vel")
-    CMD_TOPIC_FOLLOWER = rospy.get_param(param_name="~cmd_topic_follower", default="/car2/cmd_vel")
     # Global variable
     
     # Init naive controller
     rap_planner   = Rap_planner()
-    rap_ctl_leader = Rap_controller("car1", "leader", SIM, CONTROL_FREQ, MAP_FRAME,
-                                    BASE_FRAME_LEADER, BIG_CAR_FRAME, CMD_TOPIC_LEADER)
-    rap_ctl_follower = Rap_controller("car2", "follower", SIM, CONTROL_FREQ, MAP_FRAME,
-                                    BASE_FRAME_FOLLOWER, BIG_CAR_FRAME, CMD_TOPIC_FOLLOWER)
     
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
-        # Set naive cmd 
+        # Set naive cmd
         if rap_planner.run_once():
-            rap_ctl_leader.set_cmd(rap_planner.v_out, 0, rap_planner.w_out)
-            rap_ctl_follower.set_cmd(rap_planner.v_out, 0, rap_planner.w_out)
+            # Publish rap_cmd to rap_controller
+            cmd_vel = Twist()
+            cmd_vel.linear.x  = rap_planner.v_out
+            cmd_vel.angular.z = rap_planner.w_out
+            rap_planner.pub_rap_cmd_car1.publish(cmd_vel)
+            rap_planner.pub_rap_cmd_car2.publish(cmd_vel)
+
             # Debug path
             if rap_planner.global_path != None:
                 rap_planner.pub_global_path.publish(rap_planner.global_path)
             rap_planner.pub_marker_point.publish(rap_planner.marker_point)
             rap_planner.pub_marker_line.publish(rap_planner.marker_line)
-            
+            # Clear markers
             rap_planner.marker_point = MarkerArray()
             rap_planner.marker_line = MarkerArray()
-            
-        if rap_ctl_leader.run_once():
-            # Leader cmd vel 
-            cmd_vel = Twist()
-            cmd_vel.linear.x  = rap_ctl_leader.v_out
-            cmd_vel.angular.z = rap_ctl_leader.w_out
-            if REVERSE_OMEGA: # This is for weird simulation bug
-                cmd_vel.angular.z = -cmd_vel.angular.z
-            rap_ctl_leader.pub_cmd_vel.publish(cmd_vel)
-            rap_ctl_leader.pub_marker_line.publish(rap_ctl_leader.marker_line)
-            rap_ctl_leader.marker_line = MarkerArray()
-        
-        if rap_ctl_follower.run_once():
-            # Follower cmd vel 
-            cmd_vel = Twist()
-            cmd_vel.linear.x  = rap_ctl_follower.v_out
-            cmd_vel.angular.z = rap_ctl_follower.w_out
-            if REVERSE_OMEGA: # This is for weird simulation bug
-                cmd_vel.angular.z = -cmd_vel.angular.z
-            rap_ctl_follower.pub_cmd_vel.publish(cmd_vel)
-            rap_ctl_follower.pub_marker_line.publish(rap_ctl_follower.marker_line)
-            rap_ctl_follower.marker_line = MarkerArray()
         rate.sleep()

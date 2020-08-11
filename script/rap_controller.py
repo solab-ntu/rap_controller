@@ -4,11 +4,10 @@ import sys
 import tf2_ros
 import tf # conversion euler
 import random
-from geometry_msgs.msg import Twist # topic /cmd_vel
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, Twist# topic /cmd_vel
 
 import time # for testing 
 
@@ -37,7 +36,7 @@ class Rap_controller():
         self.base_link_frame = base_link_frame
         self.big_car_frame = big_car_frame
         # Subscriber
-        rospy.Subscriber("/"+robot_name+"/"+"naive_cmd", Twist, self.cmd_cb)
+        rospy.Subscriber("/"+robot_name+"/"+"rap_cmd", Twist, self.cmd_cb)
         # Publisher
         self.pub_cmd_vel = rospy.Publisher(cmd_vel_topic, Twist,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
@@ -393,7 +392,7 @@ if __name__ == '__main__':
     CMD_VEL_TOPIC       = rospy.get_param(param_name="~cmd_vel_topic", default="/car1/cmd_vel")
     # Global variable
     
-    # Init naive controller
+    # Init rap controller
     rap_controller = Rap_controller(ROBOT_NAME, ROLE, SIM, CONTROL_FREQ, MAP_FRAME,
                                     BASE_LINK_FRAME, BIG_CAR_FRAME, CMD_VEL_TOPIC)
     
