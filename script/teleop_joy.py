@@ -69,19 +69,26 @@ def cb_joy(data):
 if __name__ == '__main__':
 
     rospy.init_node(name="teleop_joy", anonymous=True)
+    IS_SPI = rospy.get_param(param_name="~use_spiderkiller_joy_stick", default="false")
+    if IS_SPI:
+        VX_AXE = 4
+        VY_AXE = 3
+        WZ_AXE = 0
+        SPEED_AXE = 7
+        TURN_AXE  = 6
+        SWITCH_MODE_BUTTON = 0
+    else:
+        VX_AXE = 3
+        VY_AXE = 2
+        WZ_AXE = 0
+        SPEED_AXE = 5
+        TURN_AXE  = 4
+        SWITCH_MODE_BUTTON = 1
 
     VX_MAX = rospy.get_param(param_name="~vx_max")
     VY_MAX = rospy.get_param(param_name="~vy_max")
     WZ_MAX = rospy.get_param(param_name="~wz_max")
-    SWITCH_MODE_BUTTON = rospy.get_param(param_name="~switch_mode_button")
-    VX_AXE = rospy.get_param(param_name="~vx_axe")
-    VY_AXE = rospy.get_param(param_name="~vy_axe")
-    WZ_AXE = rospy.get_param(param_name="~wz_axe")
-    SPEED_AXE = rospy.get_param(param_name="~speed_axe")
-    TURN_AXE  = rospy.get_param(param_name="~turn_axe")
-
-
-
+    
     VX_LAST = 0.0
     VY_LAST = 0.0
     WZ_LAST = 0.0

@@ -19,6 +19,7 @@ from rap_controller import Rap_controller
 LOOK_AHEAD_DIST = 0.8 # Look ahead distance
 GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
 CRAB_REGION = pi/6 # radian
+IGNORE_HEADING = True 
 
 class Rap_planner():
     def __init__(self):
@@ -41,7 +42,6 @@ class Rap_planner():
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
         self.big_car_xyt = None 
-    
     def path_cb(self, data):
         '''
         std_msgs/Header header
@@ -191,7 +191,8 @@ class Rap_planner():
                 beta = normalize_angle(beta - pi)
         else:
             beta = 0
-        beta = 0 # TODO
+        if IGNORE_HEADING:
+            beta = 0
         
         # Get pursu_angle
         pursu_angle = alpha + beta
@@ -212,13 +213,14 @@ class Rap_planner():
         self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
                          sin(pursu_angle)*LOOK_AHEAD_DIST,),
                         BIG_CAR_FRAME, (255,0,255), 0.1, 1)
+        
         if abs(abs(alpha) - abs(pi/2)) < CRAB_REGION:
-            print ("CRAB MODE")
+            # print ("CRAB MODE")
             self.vx_out = cos(alpha) * KP_VEL
             self.vy_out = sin(alpha) * KP_VEL
             self.wz_out = 0.0
         else:
-            print ("DIFF MODE")
+            # print ("DIFF MODE")
             # Get R 
             R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
                     (LOOK_AHEAD_DIST/2.0)**2 )
@@ -300,7 +302,6 @@ class Rap_planner():
         marker.pose.orientation.w = 1.0
         (marker.pose.position.x , marker.pose.position.y) = point
         self.marker_point.markers.append(marker)
-
 
 #######################
 ### Global function ###

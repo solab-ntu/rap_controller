@@ -22,6 +22,7 @@ KP_diff = 1.5 # KP fro diff mode
 KI = 0
 LEFT_ROTATION_SUPREMACY = 0.5 # radian
 INPLACE_ROTATION_R = 0.1  # meter
+TRANSITION_ANG_TOLERANCE = pi/40.0 # radian
 
 class Rap_controller():
     def __init__(self, robot_name,
@@ -126,16 +127,21 @@ class Rap_controller():
         self.sum_term += kp*ki*self.dt*error
         cmd = kp*error + self.sum_term
         return cmd
-    
+
+    def head_controller(self,error):
+        '''
+        big car don't move, only adjust car1 car2 heading
+        '''
+        v_con = 0.0
+        w_con = self.pi_controller(KP_crab, KI, error)
+        return (v_con, w_con)
+
     def crab_controller(self,vx,vy,error,is_forward):
         '''
         Return leader crab controller result
         '''
         # v_con = self.sign(vx) * sqrt(vx**2 + vy**2) * abs(cos(error))
-        if abs(error) < pi/18.0: # If error too big , v = 0, don't move
-            v_con = sqrt(vx**2 + vy**2) * abs(cos(error)) # Don't move until ang is OK
-        else:
-            v_con = 0.0
+        v_con = sqrt(vx**2 + vy**2) * abs(cos(error))
         if not is_forward:
             v_con *= -1.0
         w_con = self.pi_controller(KP_crab, KI, error)
@@ -205,15 +211,26 @@ class Rap_controller():
         
 
         # Decide whitch mode to use 
-        if self.Vc != 0.0 and self.Wc != 0.0:
-            self.mode = "diff"
-        else:
-            self.mode = "crab"
-
+        # Finite State Machine
+        if self.mode == "diff":
+            if self.Vy != 0.0:
+                self.mode = "diff->crab"
+        elif self.mode == "diff->crab":
+            pass # TODO: consider, do we need to go back to diff mode, if cmd cancelled
+            #if self.Vy == 0.0:
+            #    self.mode = "crab->diff"
+        elif self.mode == "crab->diff":
+            pass
+            #if self.Wc == 0.0:
+            #    self.mode = "diff->crab"
+        elif self.mode == "crab":
+            if self.Wc != 0.0:
+                self.mode = "crab->diff"
+        # rospy.loginfo("[rap_controller]" + str(self.mode))
         #################
         ### DIFF MODE ###
         #################
-        if self.mode == "diff":
+        if self.mode == "diff" or self.mode == "crab->diff" :
             # Get refenrence angle
             R = self.get_radius_of_rotation(self.Vc, self.Wc)
             self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
@@ -233,7 +250,14 @@ class Rap_controller():
 
             # Get v_out, w_out
             # if self.Vc != 0:
-            (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta, self.ref_ang)
+            if self.mode == "crab->diff":
+                if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
+                    (self.v_out, self.w_out) = self.head_controller(error_theta)
+                else:
+                    self.mode = "diff"
+            elif self.mode == "diff":
+                (self.v_out, self.w_out) = self.diff_controller(
+                                           self.Vc, self.Wc, error_theta, self.ref_ang)
             '''
             if abs(R) < INPLACE_ROTATION_R:  # TODO 
                 (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
@@ -247,7 +271,7 @@ class Rap_controller():
         #################
         ### CRAB MODE ###
         #################
-        elif self.mode == "crab":
+        elif self.mode == "crab" or self.mode == "diff->crab":
             # Get refenrence angle
             is_forward = True
             self.ref_ang = atan2(self.Vy, self.Vc)
@@ -261,7 +285,14 @@ class Rap_controller():
             error_theta = self.normalize_angle(self.ref_ang - self.theta)
 
             # Get v_out, w_out
-            (self.v_out, self.w_out) = self.crab_controller(self.Vc, self.Vy, error_theta, is_forward)
+            if self.mode == "diff->crab":
+                if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
+                    (self.v_out, self.w_out) = self.head_controller(error_theta)
+                else:
+                    self.mode = "crab"
+            elif self.mode == "crab":
+                (self.v_out, self.w_out) = self.crab_controller(
+                                           self.Vc, self.Vy, error_theta, is_forward)
             
             # Reverse follower heading velocity
             if self.role == "follower":
