@@ -25,8 +25,8 @@ class Rap_planner():
     def __init__(self):
         rospy.Subscriber(GLOBAL_PATH_TOPIC, Path, self.path_cb)
         self.global_path = None #
-        self.pub_rap_cmd_car1 = rospy.Publisher("/car1/rap_cmd", Twist,queue_size = 1,latch=False)
-        self.pub_rap_cmd_car2 = rospy.Publisher("/car2/rap_cmd", Twist,queue_size = 1,latch=False)
+        #self.pub_rap_cmd_car1 = rospy.Publisher("/car1/rap_cmd", Twist,queue_size = 1,latch=False)
+        #self.pub_rap_cmd_car2 = rospy.Publisher("/car2/rap_cmd", Twist,queue_size = 1,latch=False)
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
@@ -37,11 +37,13 @@ class Rap_planner():
         self.vx_out = None
         self.vy_out = None
         self.wz_out = None
+        self.mode = "diff" # "crab"
         # tf 
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
         self.big_car_xyt = None 
+
     def path_cb(self, data):
         '''
         std_msgs/Header header
@@ -147,8 +149,24 @@ class Rap_planner():
         
         self.global_path.poses = self.global_path.poses[prune_point:]
         return True
-    
+
+    def publish(self):
+        '''
+        Publish debug thing
+        '''
+        # Debug Markers
+        self.pub_marker_point.publish(self.marker_point)
+        self.pub_marker_line.publish(self.marker_line)
+        self.marker_line = MarkerArray()
+        self.marker_point = MarkerArray()
+
+        # Global path
+        if self.global_path != None:
+            self.pub_global_path.publish(self.global_path)
+
     def run_once(self):
+        global rap_ctl_leader, rap_ctl_follow # TODO need this?
+
         # Update tf
         t_big_car   = self.get_tf(MAP_FRAME, BIG_CAR_FRAME)
         if t_big_car != None:
@@ -169,8 +187,6 @@ class Rap_planner():
         t = self.big_car_xyt[2]
         x_goal = cos(t)*p_dif[0] + sin(t)*p_dif[1]
         y_goal =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
-        # Debug points
-        self.set_sphere((x_goal, y_goal) , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
 
         # Check goal reached 
         if sqrt(x_goal**2 + y_goal**2) < GOAL_TOLERANCE:
@@ -199,6 +215,13 @@ class Rap_planner():
 
         rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
         
+        # Debug markers
+        # Local goal
+        self.set_sphere((x_goal, y_goal) , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
+        # pursu_angle
+        self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
+                         sin(pursu_angle)*LOOK_AHEAD_DIST,),
+                        BIG_CAR_FRAME, (255,0,255), 0.1, 1)
         
         self.set_line(((0,0), (0.3,0)), BIG_CAR_FRAME,
                       RGB = (255,255,0), size = 0.02, id = 0)
@@ -209,16 +232,63 @@ class Rap_planner():
             self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
                                               y_goal + sin(pursu_angle)*0.3)),
                         BIG_CAR_FRAME, RGB = (255,0,255), size = 0.02, id = 2)
-
-        self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
-                         sin(pursu_angle)*LOOK_AHEAD_DIST,),
-                        BIG_CAR_FRAME, (255,0,255), 0.1, 1)
         
-        if abs(abs(alpha) - abs(pi/2)) < CRAB_REGION:
+        # The circle
+        NUM_CIRCLE_POINT = 200
+        p_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
+        ang = 0.0
+        while ang <= 2*pi:
+            belong = ""
+            if abs(abs(normalize_angle(ang)) - pi/2) < CRAB_REGION:
+                belong = "crab"
+            else:
+                belong = "diff"
+            # Find nearest line-segment to append
+            x = LOOK_AHEAD_DIST*cos(ang)
+            y = LOOK_AHEAD_DIST*sin(ang)
+            is_found = False
+            for seg in p_list:
+                if  seg[0] == belong and \
+                    (seg[1][-1][0] - x)**2 + \
+                    (seg[1][-1][1] - y)**2 <= \
+                     LOOK_AHEAD_DIST*2*pi/NUM_CIRCLE_POINT:
+                     is_found = True
+                     seg[1].append((x,y))
+            if not is_found: # Creat a new segment
+                p_list.append([belong, [(x,y)]])
+            ang += 2*pi/NUM_CIRCLE_POINT
+        
+        # Draw circle
+        for idx in range(len(p_list)):
+            belong = p_list[idx][0]
+            if belong == "diff":
+                color = (255,255,0)
+            else:
+                color = (255,0,0)
+            self.set_line(p_list[idx][1], BIG_CAR_FRAME, RGB = color, size = 0.02, id = idx+3)
+        
+        if abs(abs(alpha) - pi/2) < CRAB_REGION:
             # print ("CRAB MODE")
             self.vx_out = cos(alpha) * KP_VEL
             self.vy_out = sin(alpha) * KP_VEL
             self.wz_out = 0.0
+
+            # Mode decision
+            if self.mode == "diff":
+                rap_ctl_leader.is_transit = True # Need to check global varibable
+                rap_ctl_follow.is_transit = True
+                self.mode = "diff->crab"
+            elif self.mode == "diff->crab":
+                # wait for controller finish trasition
+                if (not rap_ctl_leader.is_transit) and (not rap_ctl_follow.is_transit):
+                    self.mode = "crab"
+            elif self.mode == "crab->diff": # TODO this may cause shaking
+                self.mode = "diff->crab"
+            elif self.mode == "crab":
+                pass
+            else:
+                rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
+            
         else:
             # print ("DIFF MODE")
             # Get R 
@@ -234,6 +304,24 @@ class Rap_planner():
             # if abs(alpha) > pi/2: # Go backward
             if abs(pursu_angle) > pi/2: # Go backward
                 self.vx_out *= -1.0
+
+
+            # Mode decistion
+            if self.mode == "diff":
+                pass
+            elif self.mode == "diff->crab":# TODO this may cause shaking
+                self.mode = "crab->diff"
+            elif self.mode == "crab->diff": 
+                # wait for controller finish trasition
+                if (not rap_ctl_leader.is_transit) and (not rap_ctl_follow.is_transit):
+                    self.mode = "diff"
+            elif self.mode == "crab":
+                rap_ctl_leader.is_transit = True # TODO Need to check global varibable
+                rap_ctl_follow.is_transit = True
+                self.mode = "crab->diff"
+            else:
+                rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
+        rospy.loginfo("[rap_planner] " + self.mode)
 
         return True 
 
@@ -306,8 +394,6 @@ class Rap_planner():
 #######################
 ### Global function ###
 #######################
-
-
 def sign(value):
     if value >= 0:
         return 1 
@@ -332,36 +418,46 @@ def normalize_angle(angle):
 if __name__ == '__main__':
     rospy.init_node('rap_planner',anonymous=False)
     # Get launch file parameters
-    CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
-    MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
-    BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
-    GLOBAL_PATH_TOPIC   = rospy.get_param(param_name="~global_path_topic", default="/move_base/GlobalPlanner/plan")
+    # Kinematic
     KP_VEL = rospy.get_param(param_name="~kp_vel", default="1")
     LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
     GOAL_TOLERANCE = rospy.get_param(param_name="~goal_tolerance", default="0.1")
-    # Global variable
+    # System 
+    CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
+    SIM  = rospy.get_param(param_name="~sim", default="true")
+    REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
+    # Tf frame
+    MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
+    BIG_CAR_FRAME = rospy.get_param(param_name="~big_car_frame", default="/car1/center_big_car")
+    BIG_CAR_PEER_FRAME = rospy.get_param(param_name="~big_car_peer_frame", default="/car2/center_big_car")
+    BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
+    BASE_PEER_FRAME = rospy.get_param(param_name="~base_peer_frame", default="base_peer")
+    # Topic
+    GLOBAL_PATH_TOPIC = rospy.get_param(param_name="~global_path_topic", default="/move_base/GlobalPlanner/plan")
+    CMD_VEL_TOPIC_LEADER = rospy.get_param(param_name="~cmd_vel_topic_leader", default="/car1/cmd_vel")
+    CMD_VEL_TOPIC_FOLLOW = rospy.get_param(param_name="~cmd_vel_topic_follower", default="/car2/cmd_vel")
     
+    # Global variable
     # Init naive controller
     rap_planner   = Rap_planner()
-    
+    rap_ctl_leader = Rap_controller("car1", "leader", SIM, CONTROL_FREQ, REVERSE_OMEGA,
+                                    MAP_FRAME, BASE_LINK_FRAME, BIG_CAR_FRAME,
+                                    CMD_VEL_TOPIC_LEADER)
+    rap_ctl_follow = Rap_controller("car2", "follower", SIM, CONTROL_FREQ, REVERSE_OMEGA,
+                                    MAP_FRAME, BASE_PEER_FRAME, BIG_CAR_PEER_FRAME,
+                                    CMD_VEL_TOPIC_FOLLOW)
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
         # Set naive cmd
         if rap_planner.run_once():
             # Publish rap_cmd to rap_controller
-            cmd_vel = Twist()
-            cmd_vel.linear.x = rap_planner.vx_out
-            cmd_vel.linear.y = rap_planner.vy_out
-            cmd_vel.angular.z = rap_planner.wz_out
-            rap_planner.pub_rap_cmd_car1.publish(cmd_vel)
-            rap_planner.pub_rap_cmd_car2.publish(cmd_vel)
-
-            # Debug path
-            if rap_planner.global_path != None:
-                rap_planner.pub_global_path.publish(rap_planner.global_path)
-            rap_planner.pub_marker_point.publish(rap_planner.marker_point)
-            rap_planner.pub_marker_line.publish(rap_planner.marker_line)
-            # Clear markers
-            rap_planner.marker_point = MarkerArray()
-            rap_planner.marker_line = MarkerArray()
+            rap_planner.publish()
+            rap_ctl_leader.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
+                                   rap_planner.wz_out, rap_planner.mode)
+            rap_ctl_follow.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
+                                   rap_planner.wz_out, rap_planner.mode)
+        if rap_ctl_leader.run_once():
+            rap_ctl_leader.publish()
+        if rap_ctl_follow.run_once():
+            rap_ctl_follow.publish()
         rate.sleep()
