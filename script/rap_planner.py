@@ -166,7 +166,6 @@ class Rap_planner():
         # Find point on global_path that nearest to base_link
         min_d_dist = float("inf")
         prune_point = None
-        print ("idx = " + str(len(self.global_path.poses)))
         for idx in range(len(self.global_path.poses)):
         # for pose in self.global_path.poses:
             dx = self.global_path.poses[idx].pose.position.x - self.big_car_xyt[0]
@@ -220,10 +219,9 @@ class Rap_planner():
         x_goal = cos(t)*p_dif[0] + sin(t)*p_dif[1]
         y_goal =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
 
-        # Check goal reached # TODO TODO TODO TODO change local goal to global goal
-        # if sqrt(x_goal**2 + y_goal**2) < GOAL_TOLERANCE:
-        if  self.simple_goal[0] - 
-            self.simple_goal[1] - 
+        # Check goal reached # change local goal to global goal
+        if  (self.simple_goal[0] - self.big_car_xyt[0])**2 + \
+            (self.simple_goal[1] - self.big_car_xyt[1])**2 < GOAL_TOLERANCE**2:
             self.vx_out = 0
             self.vy_out = 0
             self.wz_out = 0
