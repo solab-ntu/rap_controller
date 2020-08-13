@@ -17,7 +17,7 @@
         <param name="base_link_frame" value="car1"/>
         <param name="big_car_frame" value="base_link"/>
         <param name="cmd_vel_topic" value="/cmd_vel_car1"/>
-        <remap from="/car1/naive_cmd" to="/cmd_vel"/>
+        <remap from="/car1/rap_cmd" to="/cmd_vel"/>
     </node>
     <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car2" output='screen'>
         <param name="robot_name" value="car2"/>
@@ -29,6 +29,6 @@
         <param name="base_link_frame" value="car2"/>
         <param name="big_car_frame" value="base_link"/>
         <param name="cmd_vel_topic" value="/cmd_vel_car2"/>
-        <remap from="/car2/naive_cmd" to="/cmd_vel"/>
+        <remap from="/car2/rap_cmd" to="/cmd_vel"/>
     </node>
 </launch>

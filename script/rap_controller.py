@@ -38,7 +38,7 @@ class Rap_controller():
         self.base_link_frame = base_link_frame
         self.big_car_frame = big_car_frame
         # Subscriber
-        # rospy.Subscriber("/"+robot_name+"/"+"rap_cmd", Twist, self.cmd_cb)
+        rospy.Subscriber("/"+robot_name+"/"+"rap_cmd", Twist, self.cmd_cb)
         # Publisher
         self.pub_cmd_vel = rospy.Publisher(cmd_vel_topic, Twist,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
@@ -69,21 +69,21 @@ class Rap_controller():
         self.marker_line = MarkerArray()# Line markers show on RVIZ
 
     
-    # def cmd_cb(self,data):
-    #     '''
-    #     Topic /<robot_name>/cmd_vel callback function
-    #     Argument: 
-    #         data - geometry_msgs/Twist
-    #         geometry_msgs/Vector3 linear
-    #             float64 x
-    #             float64 y
-    #             float64 z
-    #         geometry_msgs/Vector3 angular
-    #             float64 x - ref_ang
-    #             float64 y - mode, 1 means differtial mode, 0 means crab mode
-    #             float64 z
-    #     '''
-    #     self.set_cmd(data.linear.x, data.linear.y, data.angular.z)
+    def cmd_cb(self,data):
+        '''
+        Topic /<robot_name>/cmd_vel callback function
+        Argument: 
+            data - geometry_msgs/Twist
+            geometry_msgs/Vector3 linear
+                float64 x
+                float64 y
+                float64 z
+            geometry_msgs/Vector3 angular
+                float64 x - ref_ang
+                float64 y - mode, 1 means differtial mode, 0 means crab mode
+                float64 z
+        '''
+        self.set_cmd(data.linear.x, data.linear.y, data.angular.z, "diff")
     
     def set_cmd(self, vx, vy, wc, mode):
         '''

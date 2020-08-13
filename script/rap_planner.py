@@ -7,7 +7,7 @@ import random
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
-from geometry_msgs.msg import Point, Twist
+from geometry_msgs.msg import Point, Twist, PoseStamped
 from nav_msgs.msg import Path
 
 import time # for testing 
@@ -24,7 +24,9 @@ IGNORE_HEADING = True
 class Rap_planner():
     def __init__(self):
         rospy.Subscriber(GLOBAL_PATH_TOPIC, Path, self.path_cb)
+        rospy.Subscriber(GOAL_TOPIC, PoseStamped, self.goal_cb)
         self.global_path = None #
+        self.simple_goal = None #
         #self.pub_rap_cmd_car1 = rospy.Publisher("/car1/rap_cmd", Twist,queue_size = 1,latch=False)
         #self.pub_rap_cmd_car2 = rospy.Publisher("/car2/rap_cmd", Twist,queue_size = 1,latch=False)
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
@@ -43,6 +45,32 @@ class Rap_planner():
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
         self.big_car_xyt = None 
+
+    def goal_cb(self, data):
+        '''
+        std_msgs/Header header
+            uint32 seq
+            time stamp
+            string frame_id
+        geometry_msgs/Pose pose
+            geometry_msgs/Point position
+                float64 x
+                float64 y
+                float64 z
+            geometry_msgs/Quaternion orientation
+                float64 x
+                float64 y
+                float64 z
+                float64 w
+        '''
+        # print (data)
+        quaternion = (
+            data.pose.orientation.x,
+            data.pose.orientation.y,
+            data.pose.orientation.z,
+            data.pose.orientation.w)
+        (_,_,yaw) = tf.transformations.euler_from_quaternion(quaternion)
+        self.simple_goal = (data.pose.position.x, data.pose.position.y, yaw)
 
     def path_cb(self, data):
         '''
@@ -138,6 +166,7 @@ class Rap_planner():
         # Find point on global_path that nearest to base_link
         min_d_dist = float("inf")
         prune_point = None
+        print ("idx = " + str(len(self.global_path.poses)))
         for idx in range(len(self.global_path.poses)):
         # for pose in self.global_path.poses:
             dx = self.global_path.poses[idx].pose.position.x - self.big_car_xyt[0]
@@ -166,7 +195,10 @@ class Rap_planner():
 
     def run_once(self):
         global rap_ctl_leader, rap_ctl_follow # TODO need this?
-
+        # Check simple goal is already reached
+        if self.simple_goal == None:
+            return False
+        
         # Update tf
         t_big_car   = self.get_tf(MAP_FRAME, BIG_CAR_FRAME)
         if t_big_car != None:
@@ -188,12 +220,15 @@ class Rap_planner():
         x_goal = cos(t)*p_dif[0] + sin(t)*p_dif[1]
         y_goal =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
 
-        # Check goal reached 
-        if sqrt(x_goal**2 + y_goal**2) < GOAL_TOLERANCE:
+        # Check goal reached # TODO TODO TODO TODO change local goal to global goal
+        # if sqrt(x_goal**2 + y_goal**2) < GOAL_TOLERANCE:
+        if  self.simple_goal[0] - 
+            self.simple_goal[1] - 
             self.vx_out = 0
             self.vy_out = 0
             self.wz_out = 0
             self.global_path = None
+            self.simple_goal = None
             rospy.loginfo("[rap_planner] Goal Reached")
             return True
         
@@ -213,7 +248,8 @@ class Rap_planner():
         # Get pursu_angle
         pursu_angle = alpha + beta
 
-        rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
+        # TODO 
+        # rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
         
         # Debug markers
         # Local goal
@@ -321,7 +357,7 @@ class Rap_planner():
                 self.mode = "crab->diff"
             else:
                 rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
-        rospy.loginfo("[rap_planner] " + self.mode)
+        # rospy.loginfo("[rap_planner] " + self.mode)
 
         return True 
 
@@ -436,7 +472,8 @@ if __name__ == '__main__':
     GLOBAL_PATH_TOPIC = rospy.get_param(param_name="~global_path_topic", default="/move_base/GlobalPlanner/plan")
     CMD_VEL_TOPIC_LEADER = rospy.get_param(param_name="~cmd_vel_topic_leader", default="/car1/cmd_vel")
     CMD_VEL_TOPIC_FOLLOW = rospy.get_param(param_name="~cmd_vel_topic_follower", default="/car2/cmd_vel")
-    
+    GOAL_TOPIC = rospy.get_param(param_name="~goal_topic", default="/move_base_simple/goal")
+
     # Global variable
     # Init naive controller
     rap_planner   = Rap_planner()

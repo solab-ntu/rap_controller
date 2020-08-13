@@ -28,6 +28,7 @@
         <param name="global_path_topic" value="/move_base/GlobalPlanner/plan"/>
         <param name="cmd_vel_topic_leader" value="/cmd_vel_car1"/>
         <param name="cmd_vel_topic_follower" value="/cmd_vel_car2"/>
+        <param name="goal_topic" value="/move_base_simple/goal"/>
     </node>
     
     <!-- <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car1" output='screen'>
