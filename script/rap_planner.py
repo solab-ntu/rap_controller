@@ -462,6 +462,7 @@ if __name__ == '__main__':
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
     # Tf frame
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
+    MAP_PEER_FRAME     = rospy.get_param(param_name="~map_peer_frame", default="map")
     BIG_CAR_FRAME = rospy.get_param(param_name="~big_car_frame", default="/car1/center_big_car")
     BIG_CAR_PEER_FRAME = rospy.get_param(param_name="~big_car_peer_frame", default="/car2/center_big_car")
     BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
@@ -479,7 +480,7 @@ if __name__ == '__main__':
                                     MAP_FRAME, BASE_LINK_FRAME, BIG_CAR_FRAME,
                                     CMD_VEL_TOPIC_LEADER)
     rap_ctl_follow = Rap_controller("car2", "follower", SIM, CONTROL_FREQ, REVERSE_OMEGA,
-                                    MAP_FRAME, BASE_PEER_FRAME, BIG_CAR_PEER_FRAME,
+                                    MAP_PEER_FRAME, BASE_PEER_FRAME, BIG_CAR_PEER_FRAME,
                                     CMD_VEL_TOPIC_FOLLOW)
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():

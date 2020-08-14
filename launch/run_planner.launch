@@ -12,6 +12,7 @@
         <param name="reverse_omega" value="false"/>
         <!-- Tf Frame-->
         <param name="map_frame" value="$(arg robot_name)/map"/>
+        <param name="map_peer_frame" value="car2/map"/>
         <param name="big_car_frame" value="car1/center_big_car"/>
         <param name="big_car_peer_frame" value="car2/center_big_car"/>
         <param name="base_link_frame" value="car1/base_link"/>
