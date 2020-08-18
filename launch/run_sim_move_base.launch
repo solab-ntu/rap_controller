@@ -19,6 +19,7 @@
         <param name="cmd_vel_topic" value="/cmd_vel_car1"/>
         <remap from="/car1/rap_cmd" to="/cmd_vel"/>
     </node>
+    
     <node pkg="rap_controller" type="rap_controller.py" name="rap_controller_car2" output='screen'>
         <param name="robot_name" value="car2"/>
         <param name="role" value="follower"/>
