@@ -19,7 +19,7 @@ from rap_controller import Rap_controller
 LOOK_AHEAD_DIST = 0.8 # Look ahead distance
 GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
 CRAB_REGION = pi/6 # radian
-IGNORE_HEADING = True 
+IGNORE_HEADING = False 
 
 class Rap_planner():
     def __init__(self):
@@ -27,8 +27,6 @@ class Rap_planner():
         rospy.Subscriber(GOAL_TOPIC, PoseStamped, self.goal_cb)
         self.global_path = None #
         self.simple_goal = None #
-        #self.pub_rap_cmd_car1 = rospy.Publisher("/car1/rap_cmd", Twist,queue_size = 1,latch=False)
-        #self.pub_rap_cmd_car2 = rospy.Publisher("/car2/rap_cmd", Twist,queue_size = 1,latch=False)
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
@@ -45,6 +43,32 @@ class Rap_planner():
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
         self.big_car_xyt = None 
+
+        # Init marker circle
+        # The circle
+        NUM_CIRCLE_POINT = 200
+        self.point_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
+        ang = 0.0
+        while ang <= 2*pi:
+            belong = ""
+            if abs(abs(normalize_angle(ang)) - pi/2) < CRAB_REGION:
+                belong = "crab"
+            else:
+                belong = "diff"
+            # Find nearest line-segment to append
+            x = LOOK_AHEAD_DIST*cos(ang)
+            y = LOOK_AHEAD_DIST*sin(ang)
+            is_found = False
+            for seg in self.point_list:
+                if  seg[0] == belong and \
+                    (seg[1][-1][0] - x)**2 + \
+                    (seg[1][-1][1] - y)**2 <= \
+                     LOOK_AHEAD_DIST*2*pi/NUM_CIRCLE_POINT:
+                     is_found = True
+                     seg[1].append((x,y))
+            if not is_found: # Creat a new segment
+                self.point_list.append([belong, [(x,y)]])
+            ang += 2*pi/NUM_CIRCLE_POINT
 
     def goal_cb(self, data):
         '''
@@ -63,7 +87,6 @@ class Rap_planner():
                 float64 z
                 float64 w
         '''
-        # print (data)
         quaternion = (
             data.pose.orientation.x,
             data.pose.orientation.y,
@@ -166,15 +189,17 @@ class Rap_planner():
         # Find point on global_path that nearest to base_link
         min_d_dist = float("inf")
         prune_point = None
-        for idx in range(len(self.global_path.poses)):
-        # for pose in self.global_path.poses:
-            dx = self.global_path.poses[idx].pose.position.x - self.big_car_xyt[0]
-            dy = self.global_path.poses[idx].pose.position.y - self.big_car_xyt[1]
-            d_dist = dx**2 + dy**2
-            if d_dist < min_d_dist:
-                prune_point = idx# (pose.pose.position.x, pose.pose.position.y)
-                min_d_dist = d_dist
-        
+        try:
+            for idx in range(len(self.global_path.poses)):
+                dx = self.global_path.poses[idx].pose.position.x - self.big_car_xyt[0]
+                dy = self.global_path.poses[idx].pose.position.y - self.big_car_xyt[1]
+                d_dist = dx**2 + dy**2
+                if d_dist < min_d_dist:
+                    prune_point = idx# (pose.pose.position.x, pose.pose.position.y)
+                    min_d_dist = d_dist
+        except IndexError:
+            print (self.global_path.poses)
+            return False
         self.global_path.poses = self.global_path.poses[prune_point:]
         return True
 
@@ -193,7 +218,6 @@ class Rap_planner():
             self.pub_global_path.publish(self.global_path)
 
     def run_once(self):
-        global rap_ctl_leader, rap_ctl_follow # TODO need this?
         # Check simple goal is already reached
         if self.simple_goal == None:
             return False
@@ -246,7 +270,7 @@ class Rap_planner():
         # Get pursu_angle
         pursu_angle = alpha + beta
 
-        # TODO 
+        # TODO beta
         # rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
         
         # Debug markers
@@ -267,42 +291,20 @@ class Rap_planner():
                                               y_goal + sin(pursu_angle)*0.3)),
                         BIG_CAR_FRAME, RGB = (255,0,255), size = 0.02, id = 2)
         
-        # The circle
-        NUM_CIRCLE_POINT = 200
-        p_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
-        ang = 0.0
-        while ang <= 2*pi:
-            belong = ""
-            if abs(abs(normalize_angle(ang)) - pi/2) < CRAB_REGION:
-                belong = "crab"
-            else:
-                belong = "diff"
-            # Find nearest line-segment to append
-            x = LOOK_AHEAD_DIST*cos(ang)
-            y = LOOK_AHEAD_DIST*sin(ang)
-            is_found = False
-            for seg in p_list:
-                if  seg[0] == belong and \
-                    (seg[1][-1][0] - x)**2 + \
-                    (seg[1][-1][1] - y)**2 <= \
-                     LOOK_AHEAD_DIST*2*pi/NUM_CIRCLE_POINT:
-                     is_found = True
-                     seg[1].append((x,y))
-            if not is_found: # Creat a new segment
-                p_list.append([belong, [(x,y)]])
-            ang += 2*pi/NUM_CIRCLE_POINT
-        
         # Draw circle
-        for idx in range(len(p_list)):
-            belong = p_list[idx][0]
+        for idx in range(len(self.point_list)):
+            belong = self.point_list[idx][0]
             if belong == "diff":
                 color = (255,255,0)
             else:
                 color = (255,0,0)
-            self.set_line(p_list[idx][1], BIG_CAR_FRAME, RGB = color, size = 0.02, id = idx+3)
+            self.set_line(self.point_list[idx][1], BIG_CAR_FRAME, RGB = color,
+                          size = 0.02, id = idx+3)
         
         if abs(abs(alpha) - pi/2) < CRAB_REGION:
-            # print ("CRAB MODE")
+            #################
+            ### Crab mode ###
+            #################
             self.vx_out = cos(alpha) * KP_VEL
             self.vy_out = sin(alpha) * KP_VEL
             self.wz_out = 0.0
@@ -319,12 +321,15 @@ class Rap_planner():
             elif self.mode == "crab->diff": # TODO this may cause shaking
                 self.mode = "diff->crab"
             elif self.mode == "crab":
-                pass
+                if rap_ctl_leader.is_transit or rap_ctl_follow.is_transit:
+                    self.mode = "diff->crab"
             else:
                 rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
             
         else:
-            # print ("DIFF MODE")
+            #################
+            ### Diff mode ###
+            #################
             # Get R 
             R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
                     (LOOK_AHEAD_DIST/2.0)**2 )
@@ -350,12 +355,12 @@ class Rap_planner():
                 if (not rap_ctl_leader.is_transit) and (not rap_ctl_follow.is_transit):
                     self.mode = "diff"
             elif self.mode == "crab":
-                rap_ctl_leader.is_transit = True # TODO Need to check global varibable
+                rap_ctl_leader.is_transit = True
                 rap_ctl_follow.is_transit = True
                 self.mode = "crab->diff"
             else:
                 rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
-        # rospy.loginfo("[rap_planner] " + self.mode)
+        rospy.loginfo("[rap_planner] " + self.mode)
 
         return True 
 

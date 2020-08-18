@@ -219,7 +219,6 @@ class Rap_controller():
                     (self.v_out, self.w_out) = self.head_controller(error_theta)
                 else:
                     self.is_transit = False # heading adjust completed
-                    # self.mode = "diff"
             elif self.mode == "diff":
                 (self.v_out, self.w_out) = self.diff_controller(
                                            self.Vc, self.Wc, error_theta, self.ref_ang)
@@ -244,7 +243,7 @@ class Rap_controller():
                 is_forward = False
                 self.ref_ang = normalize_angle(atan2(self.Vy, self.Vc) + pi)
             
-            # Get error
+            # Get error angle
             if self.role == "follower":
                 self.ref_ang += pi
             error_theta = normalize_angle(self.ref_ang - self.theta)
@@ -255,10 +254,12 @@ class Rap_controller():
                     (self.v_out, self.w_out) = self.head_controller(error_theta)
                 else:
                     self.is_transit = False # heading adjust completed
-                    # self.mode = "crab"
             elif self.mode == "crab":
-                (self.v_out, self.w_out) = self.crab_controller(
-                                           self.Vc, self.Vy, error_theta, is_forward)
+                if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
+                    self.is_transit = True
+                else:
+                    (self.v_out, self.w_out) = self.crab_controller(
+                                               self.Vc, self.Vy, error_theta, is_forward)
             
             # Reverse follower heading velocity
             if self.role == "follower":
