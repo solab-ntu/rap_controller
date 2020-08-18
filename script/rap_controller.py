@@ -23,7 +23,7 @@ KI = 0
 LEFT_ROTATION_SUPREMACY = 0.5 # radian
 INPLACE_ROTATION_R = 0.1  # meter
 TRANSITION_ANG_TOLERANCE = pi/40.0 # radian
-
+CRAB_ANG_TOLERANCE = pi/4.0 # radian
 class Rap_controller():
     def __init__(self, robot_name,
                  role, sim, control_freq, reverse_omega,
@@ -255,7 +255,8 @@ class Rap_controller():
                 else:
                     self.is_transit = False # heading adjust completed
             elif self.mode == "crab":
-                if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
+                if abs(error_theta) > CRAB_ANG_TOLERANCE:# Error to large
+                    # Go back to diff->crab
                     self.is_transit = True
                 else:
                     (self.v_out, self.w_out) = self.crab_controller(

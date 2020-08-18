@@ -23,13 +23,22 @@ IGNORE_HEADING = False
 
 class Rap_planner():
     def __init__(self):
+        # Subscriber
         rospy.Subscriber(GLOBAL_PATH_TOPIC, Path, self.path_cb)
         rospy.Subscriber(GOAL_TOPIC, PoseStamped, self.goal_cb)
         self.global_path = None #
         self.simple_goal = None #
+        # Publisher
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
+        # Debug publisher
+        self.pub_alpha = rospy.Publisher("/alpha", Float64,queue_size = 1,latch=False)
+        self.alpha = 0.0
+        self.pub_beta  = rospy.Publisher("/beta", Float64,queue_size = 1,latch=False)
+        self.beta = 0.0
+        self.pub_angle = rospy.Publisher("/angle", Float64,queue_size = 1,latch=False)
+        self.angle = 0.0
         # 
         self.marker_point = MarkerArray()
         self.marker_line = MarkerArray()# Line markers show on RVIZ
@@ -212,7 +221,11 @@ class Rap_planner():
         self.pub_marker_line.publish(self.marker_line)
         self.marker_line = MarkerArray()
         self.marker_point = MarkerArray()
-
+        # Dubug msg
+        self.pub_alpha.publish(self.alpha)
+        self.pub_beta.publish(self.beta)
+        self.pub_angle.publish(self.angle)
+        
         # Global path
         if self.global_path != None:
             self.pub_global_path.publish(self.global_path)
@@ -269,6 +282,10 @@ class Rap_planner():
         
         # Get pursu_angle
         pursu_angle = alpha + beta
+
+        self.alpha = alpha
+        self.beta = beta
+        self.angle = pursu_angle
 
         # TODO beta
         # rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
