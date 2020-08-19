@@ -19,7 +19,7 @@ from rap_controller import Rap_controller
 LOOK_AHEAD_DIST = 0.8 # Look ahead distance
 GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
 CRAB_REGION = pi/6 # radian
-IGNORE_HEADING = False 
+IGNORE_HEADING = True 
 
 class Rap_planner():
     def __init__(self):

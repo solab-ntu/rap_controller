@@ -79,11 +79,14 @@ class Rap_controller():
                 float64 y
                 float64 z
             geometry_msgs/Vector3 angular
-                float64 x - ref_ang
-                float64 y - mode, 1 means differtial mode, 0 means crab mode
+                float64 x
+                float64 y
                 float64 z
         '''
-        self.set_cmd(data.linear.x, data.linear.y, data.angular.z, "diff")
+        if data.angular.z != 0.0:
+            self.set_cmd(data.linear.x, data.linear.y, data.angular.z, "diff")
+        elif data.linear.y != 0.0:
+            self.set_cmd(data.linear.x, data.linear.y, data.angular.z, "crab")
     
     def set_cmd(self, vx, vy, wc, mode):
         '''
