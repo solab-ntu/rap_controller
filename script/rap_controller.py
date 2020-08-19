@@ -80,13 +80,13 @@ class Rap_controller():
                 float64 z
             geometry_msgs/Vector3 angular
                 float64 x
-                float64 y
+                float64 y - 1: crab , 0: diff
                 float64 z
         '''
-        if data.angular.z != 0.0:
-            self.set_cmd(data.linear.x, data.linear.y, data.angular.z, "diff")
-        elif data.linear.y != 0.0:
-            self.set_cmd(data.linear.x, data.linear.y, data.angular.z, "crab")
+        if data.angular.y == 1.0: # Crab mode
+            self.set_cmd(data.linear.x, data.linear.y, 0.0, "crab")
+        elif data.angular.y == 0.0: # Diff mode
+            self.set_cmd(data.linear.x, 0.0, data.angular.z, "diff")
     
     def set_cmd(self, vx, vy, wc, mode):
         '''
@@ -261,9 +261,8 @@ class Rap_controller():
                 if abs(error_theta) > CRAB_ANG_TOLERANCE:# Error to large
                     # Go back to diff->crab
                     self.is_transit = True
-                else:
-                    (self.v_out, self.w_out) = self.crab_controller(
-                                               self.Vc, self.Vy, error_theta, is_forward)
+                (self.v_out, self.w_out) = self.crab_controller(
+                                            self.Vc, self.Vy, error_theta, is_forward)
             
             # Reverse follower heading velocity
             if self.role == "follower":
