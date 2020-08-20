@@ -197,7 +197,7 @@ class Rap_controller():
         #################
         ### DIFF MODE ###
         #################
-        if self.mode == "diff" or self.mode == "crab->diff" :
+        if self.mode == "diff" or self.mode == "crab->diff" or self.mode == "rota":
             # Get refenrence angle
             R = self.get_radius_of_rotation(self.Vc, self.Wc)
             self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
@@ -225,6 +225,11 @@ class Rap_controller():
             elif self.mode == "diff":
                 (self.v_out, self.w_out) = self.diff_controller(
                                            self.Vc, self.Wc, error_theta, self.ref_ang)
+            #################
+            ### Rota MODE ###
+            #################
+            elif self.mode == "rota":
+                (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
             '''
             if abs(R) < INPLACE_ROTATION_R:  # TODO 
                 (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)

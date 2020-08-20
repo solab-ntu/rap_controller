@@ -19,7 +19,8 @@ from rap_controller import Rap_controller
 LOOK_AHEAD_DIST = 0.8 # Look ahead distance
 GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
 CRAB_REGION = pi/6 # radian
-IGNORE_HEADING = True 
+BETA_HEADING_ADJ_REGION = pi/6
+IGNORE_HEADING = False 
 
 class Rap_planner():
     def __init__(self):
@@ -271,17 +272,21 @@ class Rap_planner():
         alpha = atan2(y_goal, x_goal)
         
         # Get beta
-        if local_goal[2] != None:
+        ''' This is Benson's legacy, but it's not very helpful
+        if (not IGNORE_HEADING) and local_goal[2] != None:
             beta = normalize_angle(local_goal[2] - alpha - self.big_car_xyt[2])
             if abs(alpha) > pi/2:# Go backward
                 beta = normalize_angle(beta - pi)
         else:
             beta = 0
-        if IGNORE_HEADING:
-            beta = 0
-        
+        '''
+        beta = 0
+        if (not IGNORE_HEADING) and local_goal[2] != None:
+            beta = normalize_angle(local_goal[2] - self.big_car_xyt[2])
+            print (beta)
         # Get pursu_angle
-        pursu_angle = alpha + beta
+        # pursu_angle = alpha + beta
+        pursu_angle = alpha
 
         self.alpha = alpha
         self.beta = beta
@@ -318,7 +323,25 @@ class Rap_planner():
             self.set_line(self.point_list[idx][1], BIG_CAR_FRAME, RGB = color,
                           size = 0.02, id = idx+3)
         
-        if abs(abs(alpha) - pi/2) < CRAB_REGION:
+        if (not IGNORE_HEADING) and local_goal[2] != None:
+            if abs(beta) > BETA_HEADING_ADJ_REGION: # need to adjust heading
+                #################
+                ### Rota mode ###
+                ################# # TODO crab 
+                self.vx_out = 0.0
+                self.vy_out = 0.0
+                self.wz_out = 0.2 * sign(beta)
+                self.mode = "rota"
+            else:
+                #################
+                ### Crab mode ###
+                #################
+                self.vx_out = cos(alpha) * KP_VEL
+                self.vy_out = sin(alpha) * KP_VEL
+                self.wz_out = 0.0
+                self.mode = "crab"
+
+        elif abs(abs(alpha) - pi/2) < CRAB_REGION:
             #################
             ### Crab mode ###
             #################
