@@ -13,14 +13,8 @@ from nav_msgs.msg import Path
 import time # for testing 
 from rap_controller import Rap_controller
 
-#########################
-### Global parameters ###
-#########################
-LOOK_AHEAD_DIST = 0.8 # Look ahead distance
-GOAL_TOLERANCE = 0.1 # Consider goal reach if distance to goal is less then GOAL_TOLERANCE
-CRAB_REGION = pi/6 # radian
-BETA_HEADING_ADJ_REGION = pi/6
-IGNORE_HEADING = False 
+NUM_CIRCLE_POINT = 100
+USE_CRAB_FOR_HEADING = False
 
 class Rap_planner():
     def __init__(self):
@@ -48,15 +42,16 @@ class Rap_planner():
         self.vy_out = None
         self.wz_out = None
         self.mode = "diff" # "crab"
-        # tf 
+        self.rho = 0.0
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
         self.big_car_xyt = None 
-
+        # Flags
+        self.previous_mode = self.mode
+        self.next_mode = None
+        self.latch_xy = False
         # Init marker circle
-        # The circle
-        NUM_CIRCLE_POINT = 200
         self.point_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
         ang = 0.0
         while ang <= 2*pi:
@@ -97,6 +92,7 @@ class Rap_planner():
                 float64 z
                 float64 w
         '''
+        self.reset_plan()
         quaternion = (
             data.pose.orientation.x,
             data.pose.orientation.y,
@@ -231,6 +227,32 @@ class Rap_planner():
         if self.global_path != None:
             self.pub_global_path.publish(self.global_path)
 
+    def set_tran_mode(self, next_mode):
+        '''
+        Transit from current mode to next_mode
+        '''
+        self.previous_mode = self.mode
+        self.next_mode = next_mode
+        self.mode = "tran"
+        RAP_CTL_LEADER.is_transit = True
+        RAP_CTL_FOLLOW.is_transit = True
+        RAP_CTL_LEADER.next_mode = next_mode
+        RAP_CTL_FOLLOW.next_mode = next_mode
+        rospy.loginfo("[rap_planner] Start transit")
+    
+    def reset_plan(self):
+        '''
+        '''
+        self.vx_out = 0.0
+        self.vy_out = 0.0
+        self.wz_out = 0.0
+        self.mode = "diff"
+        self.previous_mode = "diff"
+        self.next_mode = None
+        self.global_path = None
+        self.simple_goal = None
+        self.latch_xy = False
+
     def run_once(self):
         # Check simple goal is already reached
         if self.simple_goal == None:
@@ -257,44 +279,46 @@ class Rap_planner():
         x_goal = cos(t)*p_dif[0] + sin(t)*p_dif[1]
         y_goal =-sin(t)*p_dif[0] + cos(t)*p_dif[1]
 
-        # Check goal reached # change local goal to global goal
-        if  (self.simple_goal[0] - self.big_car_xyt[0])**2 + \
-            (self.simple_goal[1] - self.big_car_xyt[1])**2 < GOAL_TOLERANCE**2:
-            self.vx_out = 0
-            self.vy_out = 0
-            self.wz_out = 0
-            self.global_path = None
-            self.simple_goal = None
-            rospy.loginfo("[rap_planner] Goal Reached")
-            return True
+        self.rho = sqrt((self.simple_goal[0] - self.big_car_xyt[0])**2 + \
+                        (self.simple_goal[1] - self.big_car_xyt[1])**2)
+
+        # Check xy_goal reached
+        if  (not self.latch_xy) and self.rho < GOAL_TOLERANCE_XY:
+            rospy.loginfo("[rap_planner] Goal xy Reached")
+            if IGNORE_HEADING:
+                self.reset_plan()
+                return True
+            else:
+                self.latch_xy = True
+        
+        # Check goal_heading reached
+        if self.latch_xy:
+            if abs(normalize_angle(self.simple_goal[2] - self.big_car_xyt[2])) <\
+                GOAL_TOLERANCE_T:
+                self.reset_plan()
+                rospy.loginfo("[rap_planner] Goal Heading Reached")
+                return True
         
         # Get alpha 
         alpha = atan2(y_goal, x_goal)
         
         # Get beta
-        ''' This is Benson's legacy, but it's not very helpful
+        #  This is Benson's legacy, but it's not very helpful
         if (not IGNORE_HEADING) and local_goal[2] != None:
             beta = normalize_angle(local_goal[2] - alpha - self.big_car_xyt[2])
             if abs(alpha) > pi/2:# Go backward
                 beta = normalize_angle(beta - pi)
         else:
             beta = 0
-        '''
-        beta = 0
-        if (not IGNORE_HEADING) and local_goal[2] != None:
-            beta = normalize_angle(local_goal[2] - self.big_car_xyt[2])
-            print (beta)
-        # Get pursu_angle
-        # pursu_angle = alpha + beta
-        pursu_angle = alpha
+        # TODO BETA coefficient
+        beta *= (self.rho/LOOK_AHEAD_DIST)
+
+        pursu_angle = alpha - beta
 
         self.alpha = alpha
         self.beta = beta
         self.angle = pursu_angle
 
-        # TODO beta
-        # rospy.loginfo("[rap_planner] Alpha=" + str(round(alpha,3)) + ", Beta=" + str(round(beta,3)))
-        
         # Debug markers
         # Local goal
         self.set_sphere((x_goal, y_goal) , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
@@ -323,84 +347,119 @@ class Rap_planner():
             self.set_line(self.point_list[idx][1], BIG_CAR_FRAME, RGB = color,
                           size = 0.02, id = idx+3)
         
+        ##################
+        ###  Get Flags ###
+        ##################
+        # Check where is the goal
+        is_aside_goal = False
+        if abs(abs(alpha) - pi/2) < CRAB_REGION:
+            is_aside_goal = True
+        # Check is need to consider heading
+        need_consider_heading = False
         if (not IGNORE_HEADING) and local_goal[2] != None:
-            if abs(beta) > BETA_HEADING_ADJ_REGION: # need to adjust heading
-                #################
-                ### Rota mode ###
-                ################# # TODO crab 
-                self.vx_out = 0.0
-                self.vy_out = 0.0
-                self.wz_out = 0.2 * sign(beta)
-                self.mode = "rota"
+            d_head = normalize_angle(local_goal[2] - self.big_car_xyt[2])
+            need_consider_heading = True
+        # Check need to switch to rota
+        is_need_rota = False # TODO current rota only when heading adjment
+        if  self.latch_xy or\
+            (USE_CRAB_FOR_HEADING and\
+            need_consider_heading and\
+            abs(d_head) > BETA_HEADING_ADJ_REGION): 
+            # need to adjust heading
+            is_need_rota = True
+        
+        ############################
+        ### Finite State Machine ###
+        ############################
+        # Flags: 
+        # States: crab, diff, rota, tran
+        if self.mode == "crab":
+            if self.latch_xy and (not IGNORE_HEADING):
+                self.set_tran_mode("rota")
             else:
-                #################
-                ### Crab mode ###
-                #################
-                self.vx_out = cos(alpha) * KP_VEL
-                self.vy_out = sin(alpha) * KP_VEL
-                self.wz_out = 0.0
-                self.mode = "crab"
+                if need_consider_heading:
+                    if is_need_rota:
+                        if USE_CRAB_FOR_HEADING:
+                            self.set_tran_mode("rota")
+                        else:
+                            self.set_tran_mode("diff")
+                    else:
+                        pass # Stay crab
+                else:
+                    if is_aside_goal:
+                        pass # Stay crab
+                    else:
+                        # Transit to diff mode
+                        self.set_tran_mode("diff")
+        
+        elif self.mode == "diff":
+            if self.latch_xy and (not IGNORE_HEADING):
+                self.set_tran_mode("rota")
+            else:
+                if need_consider_heading:# TODO Current diff can't heading adj
+                    if USE_CRAB_FOR_HEADING:
+                        self.set_tran_mode("rota")
+                    else:
+                        pass # Stay here
+                else:
+                    if is_aside_goal:
+                        self.set_tran_mode("crab")
+                    else:
+                        pass
+        
+        elif self.mode == "rota":
+            if need_consider_heading:
+                if is_need_rota:
+                    pass# Stay rota
+                else: # Finish rota
+                    if USE_CRAB_FOR_HEADING:
+                        self.set_tran_mode("crab") # Go to goal
+                    else:
+                        self.set_tran_mode("diff") # Go to goal
+            else:
+                self.set_tran_mode("crab") # Leave heading adj
+        
+        elif self.mode == "tran":
+            if (not RAP_CTL_LEADER.is_transit) and\
+               (not RAP_CTL_FOLLOW.is_transit):
+               rospy.loginfo("[rap_planner] transit finish, switch to " + self.next_mode)
+               self.mode = self.next_mode
 
-        elif abs(abs(alpha) - pi/2) < CRAB_REGION:
-            #################
-            ### Crab mode ###
-            #################
+        else:
+            rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
+
+        ####################
+        ### Execute mode ###
+        ####################
+        if self.mode == "crab" or (self.mode == "tran" and self.next_mode == "crab"):
             self.vx_out = cos(alpha) * KP_VEL
             self.vy_out = sin(alpha) * KP_VEL
             self.wz_out = 0.0
-
-            # Mode decision
-            if self.mode == "diff":
-                rap_ctl_leader.is_transit = True # Need to check global varibable
-                rap_ctl_follow.is_transit = True
-                self.mode = "diff->crab"
-            elif self.mode == "diff->crab":
-                # wait for controller finish trasition
-                if (not rap_ctl_leader.is_transit) and (not rap_ctl_follow.is_transit):
-                    self.mode = "crab"
-            elif self.mode == "crab->diff": # TODO this may cause shaking
-                self.mode = "diff->crab"
-            elif self.mode == "crab":
-                if rap_ctl_leader.is_transit or rap_ctl_follow.is_transit:
-                    self.mode = "diff->crab"
-            else:
-                rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
-            
-        else:
-            #################
-            ### Diff mode ###
-            #################
-            # Get R 
+        elif self.mode == "rota" or (self.mode == "tran" and self.next_mode == "rota"):
+            self.vx_out = 0.0
+            self.vy_out = 0.0
+            self.wz_out = 0.2 * sign(d_head)
+        elif self.mode == "diff" or (self.mode == "tran" and self.next_mode == "diff"):
+            # Get R # TODO need to check its correctness
             R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
                     (LOOK_AHEAD_DIST/2.0)**2 )
-            # if alpha < 0: # alpha = [0,-pi]
             if pursu_angle < 0: # alpha = [0,-pi]
                 R = -R
             
             self.vx_out = sqrt(x_goal**2 + y_goal**2) * KP_VEL
             self.vy_out = 0.0
             self.wz_out = self.vx_out / R
-            # if abs(alpha) > pi/2: # Go backward
             if abs(pursu_angle) > pi/2: # Go backward
                 self.vx_out *= -1.0
+        else:
+            rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
 
-
-            # Mode decistion
-            if self.mode == "diff":
-                pass
-            elif self.mode == "diff->crab":# TODO this may cause shaking
-                self.mode = "crab->diff"
-            elif self.mode == "crab->diff": 
-                # wait for controller finish trasition
-                if (not rap_ctl_leader.is_transit) and (not rap_ctl_follow.is_transit):
-                    self.mode = "diff"
-            elif self.mode == "crab":
-                rap_ctl_leader.is_transit = True
-                rap_ctl_follow.is_transit = True
-                self.mode = "crab->diff"
-            else:
-                rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
-        rospy.loginfo("[rap_planner] " + self.mode)
+        # Debug print
+        if self.mode == "tran":
+            rospy.loginfo("[rap_planner] " + self.mode + ":" + self.previous_mode\
+                          + "->" + self.next_mode)
+        else:
+            rospy.loginfo("[rap_planner] " + self.mode)
 
         return True 
 
@@ -496,15 +555,23 @@ def normalize_angle(angle):
 
 if __name__ == '__main__':
     rospy.init_node('rap_planner',anonymous=False)
+    
+    #########################
+    ### Global parameters ###
+    #########################
     # Get launch file parameters
     # Kinematic
     KP_VEL = rospy.get_param(param_name="~kp_vel", default="1")
     LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
-    GOAL_TOLERANCE = rospy.get_param(param_name="~goal_tolerance", default="0.1")
+    GOAL_TOLERANCE_XY = rospy.get_param(param_name="~goal_tolerance_xy", default="0.1")
+    GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_xy", default="0.0785")
+    CRAB_REGION = pi/6 # radian
+    BETA_HEADING_ADJ_REGION = pi/40
     # System 
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     SIM  = rospy.get_param(param_name="~sim", default="true")
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
+    IGNORE_HEADING = False
     # Tf frame
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
     MAP_PEER_FRAME     = rospy.get_param(param_name="~map_peer_frame", default="map")
@@ -517,14 +584,14 @@ if __name__ == '__main__':
     CMD_VEL_TOPIC_LEADER = rospy.get_param(param_name="~cmd_vel_topic_leader", default="/car1/cmd_vel")
     CMD_VEL_TOPIC_FOLLOW = rospy.get_param(param_name="~cmd_vel_topic_follower", default="/car2/cmd_vel")
     GOAL_TOPIC = rospy.get_param(param_name="~goal_topic", default="/move_base_simple/goal")
-
+    
     # Global variable
     # Init naive controller
     rap_planner   = Rap_planner()
-    rap_ctl_leader = Rap_controller("car1", "leader", SIM, CONTROL_FREQ, REVERSE_OMEGA,
+    RAP_CTL_LEADER = Rap_controller("car1", "leader", SIM, CONTROL_FREQ, REVERSE_OMEGA,
                                     MAP_FRAME, BASE_LINK_FRAME, BIG_CAR_FRAME,
                                     CMD_VEL_TOPIC_LEADER)
-    rap_ctl_follow = Rap_controller("car2", "follower", SIM, CONTROL_FREQ, REVERSE_OMEGA,
+    RAP_CTL_FOLLOW = Rap_controller("car2", "follower", SIM, CONTROL_FREQ, REVERSE_OMEGA,
                                     MAP_PEER_FRAME, BASE_PEER_FRAME, BIG_CAR_PEER_FRAME,
                                     CMD_VEL_TOPIC_FOLLOW)
     rate = rospy.Rate(CONTROL_FREQ)
@@ -533,12 +600,12 @@ if __name__ == '__main__':
         if rap_planner.run_once():
             # Publish rap_cmd to rap_controller
             rap_planner.publish()
-            rap_ctl_leader.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
+            RAP_CTL_LEADER.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
                                    rap_planner.wz_out, rap_planner.mode)
-            rap_ctl_follow.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
+            RAP_CTL_FOLLOW.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
                                    rap_planner.wz_out, rap_planner.mode)
-        if rap_ctl_leader.run_once():
-            rap_ctl_leader.publish()
-        if rap_ctl_follow.run_once():
-            rap_ctl_follow.publish()
+        if RAP_CTL_LEADER.run_once():
+            RAP_CTL_LEADER.publish()
+        if RAP_CTL_FOLLOW.run_once():
+            RAP_CTL_FOLLOW.publish()
         rate.sleep()

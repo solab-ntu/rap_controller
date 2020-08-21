@@ -15,7 +15,8 @@
         <!-- Kinematic -->
         <param name="kp_vel" value="0.5"/>
         <param name="look_ahead_dist" value="0.8"/>
-        <param name="goal_tolerance" value="0.1"/>
+        <param name="goal_tolerance_xy" value="0.1"/>
+        <param name="goal_tolerance_t" value="0.0785"/>
         <!-- System -->
         <param name="ctl_frequency" value="30"/>
         <param name="sim" value="$(arg sim)"/>

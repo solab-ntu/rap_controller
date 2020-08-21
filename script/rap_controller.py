@@ -24,6 +24,7 @@ LEFT_ROTATION_SUPREMACY = 0.5 # radian
 INPLACE_ROTATION_R = 0.1  # meter
 TRANSITION_ANG_TOLERANCE = pi/40.0 # radian
 CRAB_ANG_TOLERANCE = pi/4.0 # radian
+
 class Rap_controller():
     def __init__(self, robot_name,
                  role, sim, control_freq, reverse_omega,
@@ -61,6 +62,7 @@ class Rap_controller():
         # Flags
         self.mode = "diff"
         self.is_transit = False
+        self.next_mode = None
         # PID
         self.cmd_last = 0
         self.error_last = 0 
@@ -169,6 +171,45 @@ class Rap_controller():
         else:
             return radius 
 
+    def diff_get_error_angle(self):
+        '''
+        '''
+        # Get refenrence angle
+        R = self.get_radius_of_rotation(self.Vc, self.Wc)
+        ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
+        if not is_same_sign(R, self.Vc):
+            ref_ang *= -1
+        
+        # in-place rotation
+        if abs(R) < INPLACE_ROTATION_R:
+            if abs(normalize_angle( ref_ang - self.theta)) -\
+                abs(normalize_angle(-ref_ang - self.theta)) > LEFT_ROTATION_SUPREMACY:
+                ref_ang *= -1
+        
+        # Get error theta
+        if self.role == "follower":
+            ref_ang = normalize_angle(pi - ref_ang)
+        error_theta = normalize_angle(ref_ang - self.theta)
+
+        return (ref_ang, error_theta)
+
+    def crab_get_error_angle(self):
+        '''
+        '''
+        # Get refenrence angle
+        is_forward = True
+        ref_ang = atan2(self.Vy, self.Vc)
+        if ref_ang > 3*pi/4 or ref_ang < -3*pi/4: # Go backward
+            is_forward = False
+            ref_ang = normalize_angle(atan2(self.Vy, self.Vc) + pi)
+        
+        # Get error angle
+        if self.role == "follower":
+            ref_ang += pi
+        error_theta = normalize_angle(ref_ang - self.theta)
+
+        return (ref_ang, error_theta, is_forward)
+
     def run_once(self):
         '''
         call by main loop, execute every loop.
@@ -193,85 +234,58 @@ class Rap_controller():
         self.theta = normalize_angle(normalize_angle(self.base_link_xyt[2])
                                    - normalize_angle(self.big_car_xyt[2]))
         
+        #########################
+        #### Get Errror angle ###
+        #########################
+        if self.mode == "crab":
+            (self.ref_ang, error_theta, is_forward) = self.crab_get_error_angle()
 
-        #################
-        ### DIFF MODE ###
-        #################
-        if self.mode == "diff" or self.mode == "crab->diff" or self.mode == "rota":
-            # Get refenrence angle
-            R = self.get_radius_of_rotation(self.Vc, self.Wc)
-            self.ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
-            if not is_same_sign(R, self.Vc):
-                self.ref_ang *= -1
-            # if self.Vc == 0:# In-place rotation
-            
-            if abs(R) < INPLACE_ROTATION_R:# in-place rotation
-                if abs(normalize_angle( self.ref_ang - self.theta)) -\
-                   abs(normalize_angle(-self.ref_ang - self.theta)) > LEFT_ROTATION_SUPREMACY:
-                    self.ref_ang *= -1
-            
-            # Get error
-            if self.role == "follower":
-                self.ref_ang = normalize_angle(pi - self.ref_ang)
-            error_theta = normalize_angle(self.ref_ang - self.theta)
+        elif self.mode == "rota":
+            (self.ref_ang, error_theta) = self.diff_get_error_angle()
 
-            # Get v_out, w_out
-            # if self.Vc != 0:
-            if self.mode == "crab->diff":
-                if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
-                    (self.v_out, self.w_out) = self.head_controller(error_theta)
-                else:
-                    self.is_transit = False # heading adjust completed
-            elif self.mode == "diff":
-                (self.v_out, self.w_out) = self.diff_controller(
-                                           self.Vc, self.Wc, error_theta, self.ref_ang)
-            #################
-            ### Rota MODE ###
-            #################
-            elif self.mode == "rota":
-                (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
-            '''
-            if abs(R) < INPLACE_ROTATION_R:  # TODO 
-                (self.v_out, self.w_out) = self.rota_controller(self.Wc, error_theta, self.ref_ang)
-            else:
-                (self.v_out, self.w_out) = self.diff_controller(self.Vc, self.Wc, error_theta)
-            '''
-            # Reverse follower heading velocity
-            if self.role == "follower":
-                self.v_out = -self.v_out
+        elif self.mode == "tran":
+            if self.next_mode == "crab":
+                (self.ref_ang, error_theta, _) = self.crab_get_error_angle() 
+            elif self.next_mode == "diff":
+                (self.ref_ang, error_theta) = self.diff_get_error_angle()
+            elif self.next_mode == "rota":
+                (self.ref_ang, error_theta) = self.diff_get_error_angle() 
         
-        #################
-        ### CRAB MODE ###
-        #################
-        elif self.mode == "crab" or self.mode == "diff->crab":
-            # Get refenrence angle
-            is_forward = True
-            self.ref_ang = atan2(self.Vy, self.Vc)
-            if self.ref_ang > 3*pi/4 or self.ref_ang < -3*pi/4: # Go backward
-                is_forward = False
-                self.ref_ang = normalize_angle(atan2(self.Vy, self.Vc) + pi)
-            
-            # Get error angle
-            if self.role == "follower":
-                self.ref_ang += pi
-            error_theta = normalize_angle(self.ref_ang - self.theta)
+        elif self.mode == "diff":
+            (self.ref_ang, error_theta) = self.diff_get_error_angle()
 
+        ####################
+        ### Execute Mode ###
+        ####################
+        if self.mode == "crab":
             # Get v_out, w_out
-            if self.mode == "diff->crab":
-                if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
-                    (self.v_out, self.w_out) = self.head_controller(error_theta)
-                else:
-                    self.is_transit = False # heading adjust completed
-            elif self.mode == "crab":
-                if abs(error_theta) > CRAB_ANG_TOLERANCE:# Error to large
-                    # Go back to diff->crab
-                    self.is_transit = True
-                (self.v_out, self.w_out) = self.crab_controller(
-                                            self.Vc, self.Vy, error_theta, is_forward)
+            #if abs(error_theta) > CRAB_ANG_TOLERANCE:# Error to large
+                # Go back to diff->crab
+            #    self.is_transit = True # TODO can't be done?
+            (self.v_out, self.w_out) =  self.crab_controller(
+                                        self.Vc, self.Vy, error_theta, is_forward)
             
-            # Reverse follower heading velocity
-            if self.role == "follower":
-                self.v_out = -self.v_out
+        elif self.mode == "rota":
+            (self.v_out, self.w_out) = self.rota_controller(self.Wc, 
+                                       error_theta, self.ref_ang)
+
+        elif self.mode == "tran":
+            if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
+                (self.v_out, self.w_out) = self.head_controller(error_theta)
+            else:
+                self.is_transit = False # heading adjust completed
+            
+        elif self.mode == "diff":
+            # Execute controller
+            (self.v_out, self.w_out) = self.diff_controller(
+                                       self.Vc, self.Wc, error_theta, self.ref_ang)
+
+        else:
+            rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
+        
+        # Reverse follower heading velocity
+        if self.role == "follower":
+            self.v_out = -self.v_out
 
         # Saturation velocity, for safty
         self.v_out = self.saturation(self.v_out, V_MAX)
@@ -279,7 +293,6 @@ class Rap_controller():
         
         # Set marker line
         # Reference ang
-        
         p1 = self.base_link_xyt[:2]
         p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.ref_ang + self.big_car_xyt[2]),
               p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.ref_ang + self.big_car_xyt[2]))
