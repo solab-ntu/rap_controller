@@ -14,7 +14,7 @@ import time # for testing
 from rap_controller import Rap_controller
 
 NUM_CIRCLE_POINT = 100
-USE_CRAB_FOR_HEADING = False
+USE_CRAB_FOR_HEADING = True
 
 class Rap_planner():
     def __init__(self):
@@ -440,7 +440,7 @@ class Rap_planner():
             self.vy_out = 0.0
             self.wz_out = 0.2 * sign(d_head)
         elif self.mode == "diff" or (self.mode == "tran" and self.next_mode == "diff"):
-            # Get R # TODO need to check its correctness
+            # Get R 
             R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
                     (LOOK_AHEAD_DIST/2.0)**2 )
             if pursu_angle < 0: # alpha = [0,-pi]
