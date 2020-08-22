@@ -51,6 +51,7 @@ class Rap_planner():
         self.previous_mode = self.mode
         self.next_mode = None
         self.latch_xy = False
+        self.mode_latch_counter = 0
         # Init marker circle
         self.point_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
         ang = 0.0
@@ -231,12 +232,18 @@ class Rap_planner():
         '''
         Transit from current mode to next_mode
         '''
-        self.previous_mode = self.mode
-        self.next_mode = next_mode
-        self.mode = "tran"
-        RAP_CTL.is_transit = True
-        RAP_CTL.next_mode = next_mode
-        rospy.loginfo("[rap_planner] Start transit")
+        if self.mode_latch_counter > 0:
+            rospy.loginfo("[rap_planner] Switch mode rejected by latch. ("\
+                          + str(self.mode_latch_counter) + "/" + str(MODE_SWITCH_LATCH))
+            return False
+        else:
+            self.previous_mode = self.mode
+            self.next_mode = next_mode
+            self.mode = "tran"
+            RAP_CTL.is_transit = True
+            RAP_CTL.next_mode = next_mode
+            rospy.loginfo("[rap_planner] Start transit")
+            return True
     
     def reset_plan(self):
         '''
@@ -319,19 +326,19 @@ class Rap_planner():
         # Local goal
         self.set_sphere((x_goal, y_goal) , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
         # pursu_angle
-        self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
-                         sin(pursu_angle)*LOOK_AHEAD_DIST,),
-                        BIG_CAR_FRAME, (255,0,255), 0.1, 1)
+        # self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
+        #                  sin(pursu_angle)*LOOK_AHEAD_DIST,),
+        #                 BIG_CAR_FRAME, (255,0,255), 0.1, 1)
         
         self.set_line(((0,0), (0.3,0)), BIG_CAR_FRAME,
                       RGB = (255,255,0), size = 0.02, id = 0)
         self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
                                sin(alpha)*LOOK_AHEAD_DIST,)),
                       BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
-        if local_goal[2] != None:
-            self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
-                                              y_goal + sin(pursu_angle)*0.3)),
-                        BIG_CAR_FRAME, RGB = (255,0,255), size = 0.02, id = 2)
+        # if local_goal[2] != None:
+        #     self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
+        #                                       y_goal + sin(pursu_angle)*0.3)),
+        #                 BIG_CAR_FRAME, RGB = (255,0,255), size = 0.02, id = 2)
         
         # Draw circle
         for idx in range(len(self.point_list)):
@@ -356,11 +363,11 @@ class Rap_planner():
             d_head = normalize_angle(local_goal[2] - self.big_car_xyt[2])
             need_consider_heading = True
         # Check need to switch to rota
-        is_need_rota = False # TODO current rota only when heading adjment
+        is_need_rota = False # current rota only when heading adjment
         if  self.latch_xy or\
             (USE_CRAB_FOR_HEADING and\
             need_consider_heading and\
-            abs(d_head) > (GOAL_TOLERANCE_T/2.0)):
+            abs(d_head) > (GOAL_TOLERANCE_T*2)): # TODO # ROTA, cause occlication
             # need to adjust heading
             is_need_rota = True
         
@@ -374,7 +381,7 @@ class Rap_planner():
                 self.set_tran_mode("rota")
             else:
                 if need_consider_heading:
-                    if is_need_rota:
+                    if is_need_rota: 
                         if USE_CRAB_FOR_HEADING:
                             self.set_tran_mode("rota")
                         else:
@@ -419,6 +426,7 @@ class Rap_planner():
         elif self.mode == "tran":
             if (not RAP_CTL.is_transit):
                rospy.loginfo("[rap_planner] transit finish, switch to " + self.next_mode)
+               self.mode_latch_counter = MODE_SWITCH_LATCH
                self.mode = self.next_mode
 
         else:
@@ -456,6 +464,10 @@ class Rap_planner():
                           + "->" + self.next_mode)
         else:
             rospy.loginfo("[rap_planner] " + self.mode)
+
+        # Latch count 
+        if self.mode_latch_counter > 0:
+            self.mode_latch_counter -= 1
 
         return True 
 
@@ -560,17 +572,16 @@ if __name__ == '__main__':
     KP_VEL = rospy.get_param(param_name="~kp_vel", default="1")
     LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
     GOAL_TOLERANCE_XY = rospy.get_param(param_name="~goal_tolerance_xy", default="0.1")
-    GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_t", default="10")
-    GOAL_TOLERANCE_T *= pi/180.0
-    ASIDE_GOAL_ANG = rospy.get_param(param_name="~aside_goal_ang", default="60") # Degree
-    ASIDE_GOAL_ANG *= pi/180.0
+    GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_t", default="10")*pi/180
+    ASIDE_GOAL_ANG = rospy.get_param(param_name="~aside_goal_ang", default="60")*pi/180 # Degree
     ROTA_ANGULAR_VEL = rospy.get_param(param_name="~rota_angular_vel", default="0.2") # radian/s
 
-    # System 0
+    # System
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     SIM  = rospy.get_param(param_name="~sim", default="true")
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
     IGNORE_HEADING = rospy.get_param(param_name="~ignore_heading", default="false")
+    MODE_SWITCH_LATCH = rospy.get_param(param_name="~mode_switch_latch", default="2")*CONTROL_FREQ# Sec
     # Tf frame
     MAP_FRAME = rospy.get_param(param_name="~map_frame", default="map")
     MAP_PEER_FRAME = rospy.get_param(param_name="~map_peer_frame", default="map")
@@ -587,7 +598,7 @@ if __name__ == '__main__':
     # Global variable
     # Init naive controller
     rap_planner   = Rap_planner()
-    RAP_CTL = Rap_controller("car1", 
+    RAP_CTL = Rap_controller("car1",
                              SIM,
                              CONTROL_FREQ, 
                              REVERSE_OMEGA,

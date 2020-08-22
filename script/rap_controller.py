@@ -3,13 +3,10 @@ import rospy
 import sys
 import tf2_ros
 import tf # conversion euler
-import random
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from geometry_msgs.msg import Point, Twist# topic /cmd_vel
-
-import time # for testing 
 
 #########################
 ### Global parameters ###
