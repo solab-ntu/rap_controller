@@ -234,10 +234,8 @@ class Rap_planner():
         self.previous_mode = self.mode
         self.next_mode = next_mode
         self.mode = "tran"
-        RAP_CTL_LEADER.is_transit = True
-        RAP_CTL_FOLLOW.is_transit = True
-        RAP_CTL_LEADER.next_mode = next_mode
-        RAP_CTL_FOLLOW.next_mode = next_mode
+        RAP_CTL.is_transit = True
+        RAP_CTL.next_mode = next_mode
         rospy.loginfo("[rap_planner] Start transit")
     
     def reset_plan(self):
@@ -419,8 +417,7 @@ class Rap_planner():
                 self.set_tran_mode("crab") # Leave heading adj
         
         elif self.mode == "tran":
-            if (not RAP_CTL_LEADER.is_transit) and\
-               (not RAP_CTL_FOLLOW.is_transit):
+            if (not RAP_CTL.is_transit):
                rospy.loginfo("[rap_planner] transit finish, switch to " + self.next_mode)
                self.mode = self.next_mode
 
@@ -568,15 +565,15 @@ if __name__ == '__main__':
     ASIDE_GOAL_ANG = rospy.get_param(param_name="~aside_goal_ang", default="60") # Degree
     ASIDE_GOAL_ANG *= pi/180.0
     ROTA_ANGULAR_VEL = rospy.get_param(param_name="~rota_angular_vel", default="0.2") # radian/s
-    
+
     # System 0
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     SIM  = rospy.get_param(param_name="~sim", default="true")
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
     IGNORE_HEADING = rospy.get_param(param_name="~ignore_heading", default="false")
     # Tf frame
-    MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
-    MAP_PEER_FRAME     = rospy.get_param(param_name="~map_peer_frame", default="map")
+    MAP_FRAME = rospy.get_param(param_name="~map_frame", default="map")
+    MAP_PEER_FRAME = rospy.get_param(param_name="~map_peer_frame", default="map")
     BIG_CAR_FRAME = rospy.get_param(param_name="~big_car_frame", default="/car1/center_big_car")
     BIG_CAR_PEER_FRAME = rospy.get_param(param_name="~big_car_peer_frame", default="/car2/center_big_car")
     BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
@@ -590,24 +587,27 @@ if __name__ == '__main__':
     # Global variable
     # Init naive controller
     rap_planner   = Rap_planner()
-    RAP_CTL_LEADER = Rap_controller("car1", "leader", SIM, CONTROL_FREQ, REVERSE_OMEGA,
-                                    MAP_FRAME, BASE_LINK_FRAME, BIG_CAR_FRAME,
-                                    CMD_VEL_TOPIC_LEADER)
-    RAP_CTL_FOLLOW = Rap_controller("car2", "follower", SIM, CONTROL_FREQ, REVERSE_OMEGA,
-                                    MAP_PEER_FRAME, BASE_PEER_FRAME, BIG_CAR_PEER_FRAME,
-                                    CMD_VEL_TOPIC_FOLLOW)
+    RAP_CTL = Rap_controller("car1", 
+                             SIM,
+                             CONTROL_FREQ, 
+                             REVERSE_OMEGA,
+                             # Tf frame id 
+                             MAP_FRAME, 
+                             BASE_LINK_FRAME,
+                             BASE_PEER_FRAME,
+                             BIG_CAR_FRAME,
+                             BIG_CAR_PEER_FRAME,
+                             # Topic name
+                             CMD_VEL_TOPIC_LEADER,
+                             CMD_VEL_TOPIC_FOLLOW)
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
         # Set naive cmd
         if rap_planner.run_once():
             # Publish rap_cmd to rap_controller
             rap_planner.publish()
-            RAP_CTL_LEADER.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
-                                   rap_planner.wz_out, rap_planner.mode)
-            RAP_CTL_FOLLOW.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
-                                   rap_planner.wz_out, rap_planner.mode)
-        if RAP_CTL_LEADER.run_once():
-            RAP_CTL_LEADER.publish()
-        if RAP_CTL_FOLLOW.run_once():
-            RAP_CTL_FOLLOW.publish()
+            RAP_CTL.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
+                            rap_planner.wz_out, rap_planner.mode)
+        if RAP_CTL.run_once():
+            RAP_CTL.publish()
         rate.sleep()

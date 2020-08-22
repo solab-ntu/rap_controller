@@ -21,7 +21,6 @@ KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase
 KP_diff = 1.5 # KP fro diff mode
 KI = 0
 
-
 LEFT_ROTATION_SUPREMACY = 0.5 # radian
 INPLACE_ROTATION_R = 0.1  # meter
 # How precise transition it needs to be.
@@ -29,39 +28,60 @@ TRANSITION_ANG_TOLERANCE = 10 # degree
 TRANSITION_ANG_TOLERANCE *= pi/180.0
 
 class Rap_controller():
-    def __init__(self, robot_name,
-                 role, sim, control_freq, reverse_omega,
-                 map_frame, base_link_frame, big_car_frame, cmd_vel_topic):
+    def __init__(self, 
+                 robot_name,
+                 # role,
+                 sim, 
+                 control_freq, 
+                 reverse_omega,
+                 # tf frame id 
+                 map_frame, 
+                 base_link_frame_leader,
+                 base_link_frame_follow,
+                 big_car_frame_leader, 
+                 big_car_frame_follow,
+                 # Topic name
+                 cmd_vel_topic_leader,
+                 cmd_vel_topic_follow):
         # Store argument
         self.robot_name = robot_name
-        self.role = role
+        # fself.role = role
         self.sim = sim
         self.control_freq = control_freq
         self.reverse_omega = reverse_omega
+        # Tf frame id 
         self.map_frame = map_frame
-        self.base_link_frame = base_link_frame
-        self.big_car_frame = big_car_frame
+        self.base_link_frame_leader = base_link_frame_leader
+        self.base_link_frame_follow = base_link_frame_follow
+        self.big_car_frame_leader   = big_car_frame_leader
+        self.big_car_frame_follow   = big_car_frame_follow
         # Subscriber
         rospy.Subscriber("/"+robot_name+"/"+"rap_cmd", Twist, self.cmd_cb)
         # Publisher
-        self.pub_cmd_vel = rospy.Publisher(cmd_vel_topic, Twist,queue_size = 1,latch=False)
+        self.pub_cmd_vel_leader = rospy.Publisher(cmd_vel_topic_leader, Twist,queue_size = 1,latch=False)
+        self.pub_cmd_vel_follow = rospy.Publisher(cmd_vel_topic_follow, Twist,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
         # Parameters
         self.dt = 1.0 / self.control_freq
         # Tf listner
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
-        self.base_link_xyt = None # (x,y,theta)
-        self.big_car_xyt = None  # (x,y,theta)
-        self.theta = None
+        self.base_link_xyt_L = None # (x,y,theta)
+        self.base_link_xyt_F = None # (x,y,theta)
+        self.big_car_xyt_L = None  # (x,y,theta)
+        self.big_car_xyt_F = None  # (x,y,theta)
+        self.theta_L = None
+        self.theta_F = None
         # Kinematics 
-        self.Vc = 0
+        self.Vx = 0
         self.Vy = 0
-        self.Wc = 0
-        self.ref_ang = 0
+        self.Wz = 0
+        # self.ref_ang = 0
         # Output 
-        self.v_out = None
-        self.w_out = None
+        self.v_out_L = None
+        self.w_out_L = None
+        self.v_out_F = None
+        self.w_out_F = None
         # Flags
         self.mode = "diff"
         self.is_transit = False
@@ -72,8 +92,7 @@ class Rap_controller():
         self.sum_term = 0
         # Markers
         self.marker_line = MarkerArray()# Line markers show on RVIZ
-
-    
+ 
     def cmd_cb(self,data):
         '''
         Topic /<robot_name>/cmd_vel callback function
@@ -93,13 +112,13 @@ class Rap_controller():
         elif data.angular.y == 0.0: # Diff mode
             self.set_cmd(data.linear.x, 0.0, data.angular.z, "diff")
     
-    def set_cmd(self, vx, vy, wc, mode):
+    def set_cmd(self, vx, vy, wz, mode):
         '''
         Set cmd come from rap_planner
         '''
-        self.Vc = vx
+        self.Vx = vx
         self.Vy = vy
-        self.Wc = wc
+        self.Wz = wz
         self.mode = mode
 
     def pi_controller(self, kp, ki,error):
@@ -176,42 +195,58 @@ class Rap_controller():
 
     def diff_get_error_angle(self):
         '''
-        '''
+        Input:
+            self.Vy
+            self.Wz
+            self.theta
+        Return ( (ref_ang, error_theta) , (ref_ang, error_theta) )
+                 ^ leader                  ^ follower
+        '''    
         # Get refenrence angle
-        R = self.get_radius_of_rotation(self.Vc, self.Wc)
-        ref_ang = atan2(TOW_CAR_LENGTH/2.0, abs(R))
-        if not is_same_sign(R, self.Vc):
-            ref_ang *= -1
+        R = self.get_radius_of_rotation(self.Vx, self.Wz)
+        ref_ang_L = atan2(TOW_CAR_LENGTH/2.0, abs(R))
+        if not is_same_sign(R, self.Vx):
+            ref_ang_L *= -1
         
-        # in-place rotation
+        # in-place rotation # TODO use both leader follower to decide 
         if abs(R) < INPLACE_ROTATION_R:
-            if  abs(normalize_angle( ref_ang - self.theta)) -\
-                abs(normalize_angle(-ref_ang - self.theta)) > LEFT_ROTATION_SUPREMACY:
-                ref_ang *= -1
+            if  abs(normalize_angle( ref_ang_L - self.theta_L)) -\
+                abs(normalize_angle(-ref_ang_L - self.theta_L)) > LEFT_ROTATION_SUPREMACY:
+                ref_ang_L *= -1
+        
+        # Follower reverse ref_ang
+        ref_ang_F = normalize_angle(pi - ref_ang_L)
         
         # Get error theta
-        if self.role == "follower":
-            ref_ang = normalize_angle(pi - ref_ang)
-        error_theta = normalize_angle(ref_ang - self.theta)
+        error_theta_L = normalize_angle(ref_ang_L - self.theta_L)
+        error_theta_F = normalize_angle(ref_ang_F - self.theta_F)
 
-        return (ref_ang, error_theta)
+        return ((ref_ang_L, error_theta_L), (ref_ang_F, error_theta_F))
 
     def crab_get_error_angle(self):
         '''
-        '''
+        Input:
+            self.Vy
+            self.Vx
+            self.theta
+        Return ( (ref_ang, error_theta) , (ref_ang, error_theta) , T/F)
+                 ^ leader                  ^ follower
+        '''        
         # Get refenrence angle
         is_forward = True
-        ref_ang = atan2(self.Vy, self.Vc)
-        if ref_ang > 3*pi/4 or ref_ang < -3*pi/4: # Go backward
+        ref_ang_L = atan2(self.Vy, self.Vx)
+        if ref_ang_L > 3*pi/4 or ref_ang_L < -3*pi/4: # Go backward # TODO need debug
             is_forward = False
-            ref_ang = normalize_angle(atan2(self.Vy, self.Vc) + pi)
+            ref_ang_L = normalize_angle(atan2(self.Vy, self.Vx) + pi)
+        
+        # Follower reverse ref_angle
+        ref_ang_F = ref_ang_L + pi
         
         # Get error angle
-        if self.role == "follower":
-            ref_ang += pi
-        error_theta = normalize_angle(ref_ang - self.theta)
+        error_theta_L = normalize_angle(ref_ang_L - self.theta_L)
+        error_theta_F = normalize_angle(ref_ang_F - self.theta_F)
 
-        return (ref_ang, error_theta, is_forward)
+        return ((ref_ang_L, error_theta_L), (ref_ang_F, error_theta_F), is_forward)
 
     def run_once(self):
         '''
@@ -221,93 +256,112 @@ class Rap_controller():
             False - Can't finish calculation, don't publish
         '''
         # Update tf
-        
-        t_base_link = self.get_tf(self.map_frame, self.base_link_frame)
-        t_big_car   = self.get_tf(self.map_frame, self.big_car_frame)
+        t_base_link_L = self.get_tf(self.map_frame, self.base_link_frame_leader)
+        t_base_link_F = self.get_tf(self.map_frame, self.base_link_frame_follow)
+        t_big_car_L   = self.get_tf(self.map_frame, self.big_car_frame_leader)
+        t_big_car_F   = self.get_tf(self.map_frame, self.big_car_frame_follow)
 
-        if t_base_link != None:
-            self.base_link_xyt = t_base_link
-        if t_big_car != None:
-            self.big_car_xyt = t_big_car
+        if t_base_link_L != None:
+            self.base_link_xyt_L = t_base_link_L
+        if t_big_car_L != None:
+            self.big_car_xyt_L = t_big_car_L
+        if t_base_link_F != None:
+            self.base_link_xyt_F = t_base_link_F
+        if t_big_car_F != None:
+            self.big_car_xyt_F = t_big_car_F
         
-        if self.base_link_xyt == None or self.big_car_xyt == None: #tf is invalid
+        if  self.base_link_xyt_L == None or self.big_car_xyt_L == None or\
+            self.base_link_xyt_F == None or self.big_car_xyt_F == None: #tf is invalid
             return False
         
         # Get current theta
-        self.theta = normalize_angle(normalize_angle(self.base_link_xyt[2])
-                                   - normalize_angle(self.big_car_xyt[2]))
-        
+        self.theta_L = normalize_angle(normalize_angle(self.base_link_xyt_L[2])
+                                     - normalize_angle(self.big_car_xyt_L[2]))
+        self.theta_F = normalize_angle(normalize_angle(self.base_link_xyt_F[2])
+                                     - normalize_angle(self.big_car_xyt_F[2]))
         #########################
         #### Get Errror angle ###
         #########################
         if self.mode == "crab":
-            (self.ref_ang, error_theta, is_forward) = self.crab_get_error_angle()
+            ((ref_ang_L, error_theta_L),
+             (ref_ang_F, error_theta_F), is_forward) = self.crab_get_error_angle()
 
         elif self.mode == "rota":
-            (self.ref_ang, error_theta) = self.diff_get_error_angle()
+            ((ref_ang_L, error_theta_L),
+             (ref_ang_F, error_theta_F)) = self.diff_get_error_angle()
 
         elif self.mode == "tran":
             if self.next_mode == "crab":
-                (self.ref_ang, error_theta, _) = self.crab_get_error_angle() 
+                ((ref_ang_L, error_theta_L),
+                 (ref_ang_F, error_theta_F), _) = self.crab_get_error_angle()
             elif self.next_mode == "diff":
-                (self.ref_ang, error_theta) = self.diff_get_error_angle()
+                ((ref_ang_L, error_theta_L),
+                (ref_ang_F, error_theta_F)) = self.diff_get_error_angle()
             elif self.next_mode == "rota":
-                (self.ref_ang, error_theta) = self.diff_get_error_angle() 
+                ((ref_ang_L, error_theta_L),
+                (ref_ang_F, error_theta_F)) = self.diff_get_error_angle()
         
         elif self.mode == "diff":
-            (self.ref_ang, error_theta) = self.diff_get_error_angle()
+            ((ref_ang_L, error_theta_L),
+             (ref_ang_F, error_theta_F)) = self.diff_get_error_angle()
 
         ####################
         ### Execute Mode ###
         ####################
         if self.mode == "crab":
             # Get v_out, w_out
-            (self.v_out, self.w_out) =  self.crab_controller(
-                                        self.Vc, self.Vy, error_theta, is_forward)
-            
+            (self.v_out_L, self.w_out_L) =  self.crab_controller(
+                                            self.Vx, self.Vy, error_theta_L, is_forward)
+            (self.v_out_F, self.w_out_F) =  self.crab_controller(
+                                            self.Vx, self.Vy, error_theta_F, is_forward)
         elif self.mode == "rota":
-            (self.v_out, self.w_out) = self.rota_controller(self.Wc, 
-                                       error_theta, self.ref_ang)
-
+            (self.v_out_L, self.w_out_L) =  self.rota_controller(
+                                            self.Wz,error_theta_L, ref_ang_L)
+            (self.v_out_F, self.w_out_F) =  self.rota_controller(
+                                            self.Wz,error_theta_F, ref_ang_F)
         elif self.mode == "tran":
-            if abs(error_theta) > (TRANSITION_ANG_TOLERANCE/2.0):
-                (self.v_out, self.w_out) = self.head_controller(error_theta)
+            if abs(error_theta_L) > (TRANSITION_ANG_TOLERANCE/2.0) or\
+               abs(error_theta_F) > (TRANSITION_ANG_TOLERANCE/2.0):
+                (self.v_out_L, self.w_out_L) = self.head_controller(error_theta_L)
+                (self.v_out_F, self.w_out_F) = self.head_controller(error_theta_F)
             else:
                 self.is_transit = False # heading adjust completed
             
         elif self.mode == "diff":
-            # Debug print
-            if self.role == "leader":
-                rospy.loginfo("[rap_planner] Vc:" + str(self.Vc) + ", Vy:" + str(self.Vy)\
-                            + ", Wc:" + str(self.Wc))
-            # Execute controller
-            (self.v_out, self.w_out) = self.diff_controller(
-                                       self.Vc, self.Wc, error_theta, self.ref_ang)
-
+            (self.v_out_L, self.w_out_L) =  self.diff_controller(
+                                            self.Vx, self.Wz, error_theta_L, ref_ang_L)
+            (self.v_out_F, self.w_out_F) =  self.diff_controller(
+                                            self.Vx, self.Wz, error_theta_F, ref_ang_F)
         else:
             rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
         
         # Reverse follower heading velocity
-        if self.role == "follower":
-            self.v_out = -self.v_out
+        self.v_out_F *= -1
 
         # Saturation velocity, for safty
-        self.v_out = self.saturation(self.v_out, V_MAX)
-        self.w_out = self.saturation(self.w_out, W_MAX)
+        self.v_out_L = self.saturation(self.v_out_L, V_MAX)
+        self.w_out_L = self.saturation(self.w_out_L, W_MAX)
+        self.v_out_F = self.saturation(self.v_out_F, V_MAX)
+        self.w_out_F = self.saturation(self.w_out_F, W_MAX)
         
         # Set marker line
-        # Reference ang
-        p1 = self.base_link_xyt[:2]
-        p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.ref_ang + self.big_car_xyt[2]),
-              p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.ref_ang + self.big_car_xyt[2]))
-        self.set_line([p1, p2], RGB = (0,0,255), size = 0.03 ,id = 0)
-        # Current ang
-        p2 = (p1[0] + TOW_CAR_LENGTH/1.5 * cos(self.base_link_xyt[2]),
-              p1[1] + TOW_CAR_LENGTH/1.5 * sin(self.base_link_xyt[2]))
-        self.set_line([p1, p2], RGB = (102,178,255), size = 0.03 ,id = 1)
-        
-        # Set publish flag
-        return True
+        # Leader ref_ang
+        p = (0.6*cos(ref_ang_L) + TOW_CAR_LENGTH/2.0
+            ,0.6*sin(ref_ang_L))
+        self.set_line([(TOW_CAR_LENGTH/2,0), p], self.big_car_frame_leader,
+                      RGB = (0,0,255), size = 0.03 ,id = 0)#
+        # Leader current ang
+        self.set_line([(0,0), (0.6,0)], self.base_link_frame_leader,
+                      RGB = (102,178,255), size = 0.03 ,id = 1)
+        # Follower ref_ang
+        p = (0.6*cos(ref_ang_F) - TOW_CAR_LENGTH/2.0
+            ,0.6*sin(ref_ang_F))
+        self.set_line([(-TOW_CAR_LENGTH/2,0), p], self.big_car_frame_leader,
+                      RGB = (0,0,255), size = 0.03 ,id = 2)#
+        # Follower current ang
+        self.set_line([(0,0), (0.6,0)], self.base_link_frame_follow,
+                      RGB = (102,178,255), size = 0.03 ,id = 3)
+        return True # Enable publish
 
     def saturation(self, value, maximum):
         '''
@@ -356,7 +410,7 @@ class Rap_controller():
             euler = tf.transformations.euler_from_quaternion(quaternion)
             return (t.transform.translation.x, t.transform.translation.y, euler[2])
 
-    def set_line(self, points, RGB = None , size = 0.2, id = 0):
+    def set_line(self, points,frame_id, RGB = (255,0.0) , size = 0.2, id = 0):
         '''
         Set line at MarkArray
         Input : 
@@ -366,7 +420,7 @@ class Rap_controller():
             id - int
         '''
         marker = Marker()
-        marker.header.frame_id = self.map_frame
+        marker.header.frame_id = frame_id
         marker.id = id
         marker.ns = "tiles"
         marker.header.stamp = rospy.get_rostime()
@@ -376,14 +430,9 @@ class Rap_controller():
         marker.scale.y = size
         marker.scale.z = size
         marker.color.a = 1.0
-        if RGB == None : 
-            marker.color.r = random.randint(0,255) / 255.0
-            marker.color.g = random.randint(0,255) / 255.0
-            marker.color.b = random.randint(0,255) / 255.0
-        else: 
-            marker.color.r = RGB[0]/255.0
-            marker.color.g = RGB[1]/255.0
-            marker.color.b = RGB[2]/255.0
+        marker.color.r = RGB[0]/255.0
+        marker.color.g = RGB[1]/255.0
+        marker.color.b = RGB[2]/255.0
         marker.pose.orientation.w = 1.0
         for i in points:
             p = Point()
@@ -398,18 +447,25 @@ class Rap_controller():
         '''
         # Publish cmd_vel
         cmd_vel = Twist()
-        cmd_vel.linear.x  = self.v_out
-        cmd_vel.angular.z = self.w_out
+        # Publish Leader cmd
+        cmd_vel.linear.x  = self.v_out_L
+        cmd_vel.angular.z = self.w_out_L
         if self.reverse_omega: # This is for weird simulation bug
-            cmd_vel.angular.z = -cmd_vel.angular.z
-        self.pub_cmd_vel.publish(cmd_vel)
+            cmd_vel.angular.z *= -1
+        self.pub_cmd_vel_leader.publish(cmd_vel)
+        # Publish Follower cmd
+        cmd_vel.linear.x  = self.v_out_F
+        cmd_vel.angular.z = self.w_out_F
+        if self.reverse_omega: # This is for weird simulation bug
+            cmd_vel.angular.z *= -1
+        self.pub_cmd_vel_follow.publish(cmd_vel)
         
         # Publish marker, for debug
         self.pub_marker_line.publish(self.marker_line)
         
         # Debug print
-        rospy.logdebug(self.role + " : V=" + str(round(self.v_out, 3))+
-                                   ", W=" + str(round(self.w_out, 3)))
+        rospy.logdebug("Leader" + " : V=" + str(round(self.v_out_L, 3))+
+                                   ", W=" + str(round(self.w_out_L, 3)))
         
         # Reset markers
         self.marker_line = MarkerArray()
@@ -460,19 +516,33 @@ if __name__ == '__main__':
     SIM           = rospy.get_param(param_name="~sim", default="false")
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
+    # TF frame id 
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
+    BIG_CAR_FRAME = rospy.get_param(param_name="~big_car_frame", default="/car1/center_big_car")
+    BIG_CAR_PEER_FRAME = rospy.get_param(param_name="~big_car_peer_frame", default="/car2/center_big_car")
     BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
-    BIG_CAR_FRAME   = rospy.get_param(param_name="~big_car_frame", default="big_car")
-    CMD_VEL_TOPIC       = rospy.get_param(param_name="~cmd_vel_topic", default="/car1/cmd_vel")
-    # Global variable
+    BASE_PEER_FRAME = rospy.get_param(param_name="~base_peer_frame", default="base_peer")
+    # Topic name
+    CMD_VEL_TOPIC_LEADER = rospy.get_param(param_name="~cmd_vel_topic_leader", default="/car1/cmd_vel")
+    CMD_VEL_TOPIC_FOLLOW = rospy.get_param(param_name="~cmd_vel_topic_follower", default="/car2/cmd_vel")
     
     # Init rap controller
-    rap_controller = Rap_controller(ROBOT_NAME, ROLE, SIM, CONTROL_FREQ, REVERSE_OMEGA,
-                                    MAP_FRAME,BASE_LINK_FRAME, BIG_CAR_FRAME,
-                                    CMD_VEL_TOPIC)
+    RAP_CTL = Rap_controller("car1", 
+                             SIM,
+                             CONTROL_FREQ, 
+                             REVERSE_OMEGA,
+                             # Tf frame id 
+                             MAP_FRAME, 
+                             BASE_LINK_FRAME,
+                             BASE_PEER_FRAME,
+                             BIG_CAR_FRAME,
+                             BIG_CAR_PEER_FRAME,
+                             # Topic name
+                             CMD_VEL_TOPIC_LEADER,
+                             CMD_VEL_TOPIC_FOLLOW)
     
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
-        if rap_controller.run_once():
-            rap_controller.publish()
+        if RAP_CTL.run_once():
+            RAP_CTL.publish()
         rate.sleep()
