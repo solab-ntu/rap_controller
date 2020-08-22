@@ -14,7 +14,7 @@ from rap_controller import Rap_controller
 
 NUM_CIRCLE_POINT = 100
 USE_CRAB_FOR_HEADING = True
-USE_COSTMAP = True
+USE_COSTMAP = False
 
 class Rap_planner():
     def __init__(self):
@@ -38,7 +38,7 @@ class Rap_planner():
         self.beta = 0.0
         self.pub_angle = rospy.Publisher("/angle", Float64,queue_size = 1,latch=False)
         self.angle = 0.0
-        # 
+        # Debug markers
         self.marker_point = MarkerArray()
         self.marker_line = MarkerArray()# Line markers show on RVIZ
         self.marker_text = MarkerArray()
@@ -155,7 +155,7 @@ class Rap_planner():
         int8[] data - 0~100 , 0: free space , 100: obstacle
         '''
         self.costmap = data
-        print (self.costmap.info)
+        # print (self.costmap.info)
     
     def get_tf(self,frame_id, child_frame_id):
         '''
@@ -194,7 +194,7 @@ class Rap_planner():
         # Find a local goal on global_path
         min_d_dist = float("inf")
         local_goal = None # (x,y)
-        for pose in self.global_path.poses:
+        for pose in self.global_path.poses: # TODO This can do some performance improvement
             dx = pose.pose.position.x - self.big_car_xyt[0]
             dy = pose.pose.position.y - self.big_car_xyt[1]
             d_dist = abs(dx**2 + dy**2 - LOOK_AHEAD_DIST**2)
@@ -391,9 +391,10 @@ class Rap_planner():
         if abs(abs(alpha) - pi/2) < (ASIDE_GOAL_ANG/2.0):
             is_aside_goal = True
         # Check is need to consider heading
+        d_head = normalize_angle(self.simple_goal[2] - self.big_car_xyt[2])
         need_consider_heading = False
         if (not IGNORE_HEADING) and local_goal[2] != None:
-            d_head = normalize_angle(local_goal[2] - self.big_car_xyt[2])
+            
             need_consider_heading = True
         # Check need to switch to rota
         is_need_rota = False # current rota only when heading adjment
@@ -477,12 +478,15 @@ class Rap_planner():
             self.vy_out = 0.0
             self.wz_out = ROTA_ANGULAR_VEL*sign(d_head)
         elif self.mode == "diff" or (self.mode == "tran" and self.next_mode == "diff"):
-            # Get R 
-            R = sqrt( (tan(pi/2 - (pursu_angle))*self.rho/2)**2 +
-                    (self.rho/2.0)**2 )
+            # Get R
+            if self.rho < LOOK_AHEAD_DIST:
+                R = sqrt((tan(pi/2 - (pursu_angle))*self.rho/2)**2 +
+                        (self.rho/2.0)**2 )
+            else:
+                R = sqrt((tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
+                        (LOOK_AHEAD_DIST/2.0)**2 )
             if pursu_angle < 0: # alpha = [0,-pi]
                 R = -R
-            
             self.vx_out = sqrt(x_goal**2 + y_goal**2) * KP_VEL
             self.vy_out = 0.0
             self.wz_out = self.vx_out / R
@@ -491,15 +495,7 @@ class Rap_planner():
         else:
             rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
 
-        # Debug print
-        #  TODO dev rviz text msg to show mode
-        '''
-        if self.mode == "tran":
-            rospy.loginfo("[rap_planner] " + self.mode + ":" + self.previous_mode\
-                          + "->" + self.next_mode)
-        else:
-            rospy.loginfo("[rap_planner] " + self.mode)
-        '''
+        # Debug marker text
         if self.mode == "tran":
             text = str(self.previous_mode) + "->" + self.next_mode
         else:
