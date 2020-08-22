@@ -20,10 +20,13 @@ W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
 KI = 0
+
+
 LEFT_ROTATION_SUPREMACY = 0.5 # radian
 INPLACE_ROTATION_R = 0.1  # meter
-TRANSITION_ANG_TOLERANCE = pi/40.0 # radian
-CRAB_ANG_TOLERANCE = pi/4.0 # radian
+# How precise transition it needs to be.
+TRANSITION_ANG_TOLERANCE = 10 # degree
+TRANSITION_ANG_TOLERANCE *= pi/180.0
 
 class Rap_controller():
     def __init__(self, robot_name,
@@ -182,7 +185,7 @@ class Rap_controller():
         
         # in-place rotation
         if abs(R) < INPLACE_ROTATION_R:
-            if abs(normalize_angle( ref_ang - self.theta)) -\
+            if  abs(normalize_angle( ref_ang - self.theta)) -\
                 abs(normalize_angle(-ref_ang - self.theta)) > LEFT_ROTATION_SUPREMACY:
                 ref_ang *= -1
         
@@ -259,9 +262,6 @@ class Rap_controller():
         ####################
         if self.mode == "crab":
             # Get v_out, w_out
-            #if abs(error_theta) > CRAB_ANG_TOLERANCE:# Error to large
-                # Go back to diff->crab
-            #    self.is_transit = True # TODO can't be done?
             (self.v_out, self.w_out) =  self.crab_controller(
                                         self.Vc, self.Vy, error_theta, is_forward)
             
@@ -270,12 +270,16 @@ class Rap_controller():
                                        error_theta, self.ref_ang)
 
         elif self.mode == "tran":
-            if abs(error_theta) > TRANSITION_ANG_TOLERANCE:
+            if abs(error_theta) > (TRANSITION_ANG_TOLERANCE/2.0):
                 (self.v_out, self.w_out) = self.head_controller(error_theta)
             else:
                 self.is_transit = False # heading adjust completed
             
         elif self.mode == "diff":
+            # Debug print
+            if self.role == "leader":
+                rospy.loginfo("[rap_planner] Vc:" + str(self.Vc) + ", Vy:" + str(self.Vy)\
+                            + ", Wc:" + str(self.Wc))
             # Execute controller
             (self.v_out, self.w_out) = self.diff_controller(
                                        self.Vc, self.Wc, error_theta, self.ref_ang)

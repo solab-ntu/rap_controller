@@ -56,7 +56,7 @@ class Rap_planner():
         ang = 0.0
         while ang <= 2*pi:
             belong = ""
-            if abs(abs(normalize_angle(ang)) - pi/2) < CRAB_REGION:
+            if abs(abs(normalize_angle(ang)) - pi/2) < (ASIDE_GOAL_ANG/2.0):
                 belong = "crab"
             else:
                 belong = "diff"
@@ -294,7 +294,7 @@ class Rap_planner():
         # Check goal_heading reached
         if self.latch_xy:
             if abs(normalize_angle(self.simple_goal[2] - self.big_car_xyt[2])) <\
-                GOAL_TOLERANCE_T:
+                (GOAL_TOLERANCE_T/2.0):
                 self.reset_plan()
                 rospy.loginfo("[rap_planner] Goal Heading Reached")
                 return True
@@ -303,6 +303,7 @@ class Rap_planner():
         alpha = atan2(y_goal, x_goal)
         
         # Get beta
+        '''
         #  This is Benson's legacy, but it's not very helpful
         if (not IGNORE_HEADING) and local_goal[2] != None:
             beta = normalize_angle(local_goal[2] - alpha - self.big_car_xyt[2])
@@ -310,14 +311,11 @@ class Rap_planner():
                 beta = normalize_angle(beta - pi)
         else:
             beta = 0
-        # TODO BETA coefficient
-        beta *= (self.rho/LOOK_AHEAD_DIST)
-
-        pursu_angle = alpha - beta
-
+        '''
+        pursu_angle = alpha
         self.alpha = alpha
-        self.beta = beta
-        self.angle = pursu_angle
+        # self.beta = beta
+        # self.angle = pursu_angle
 
         # Debug markers
         # Local goal
@@ -352,7 +350,7 @@ class Rap_planner():
         ##################
         # Check where is the goal
         is_aside_goal = False
-        if abs(abs(alpha) - pi/2) < CRAB_REGION:
+        if abs(abs(alpha) - pi/2) < (ASIDE_GOAL_ANG/2.0):
             is_aside_goal = True
         # Check is need to consider heading
         need_consider_heading = False
@@ -364,7 +362,7 @@ class Rap_planner():
         if  self.latch_xy or\
             (USE_CRAB_FOR_HEADING and\
             need_consider_heading and\
-            abs(d_head) > BETA_HEADING_ADJ_REGION): 
+            abs(d_head) > (GOAL_TOLERANCE_T/2.0)):
             # need to adjust heading
             is_need_rota = True
         
@@ -396,8 +394,9 @@ class Rap_planner():
             if self.latch_xy and (not IGNORE_HEADING):
                 self.set_tran_mode("rota")
             else:
-                if need_consider_heading:# TODO Current diff can't heading adj
+                if need_consider_heading:
                     if USE_CRAB_FOR_HEADING:
+                        # Current diff can't heading adj
                         self.set_tran_mode("rota")
                     else:
                         pass # Stay here
@@ -438,11 +437,11 @@ class Rap_planner():
         elif self.mode == "rota" or (self.mode == "tran" and self.next_mode == "rota"):
             self.vx_out = 0.0
             self.vy_out = 0.0
-            self.wz_out = 0.2 * sign(d_head)
+            self.wz_out = ROTA_ANGULAR_VEL* sign(d_head)
         elif self.mode == "diff" or (self.mode == "tran" and self.next_mode == "diff"):
             # Get R 
-            R = sqrt( (tan(pi/2 - (pursu_angle))*LOOK_AHEAD_DIST/2)**2 +
-                    (LOOK_AHEAD_DIST/2.0)**2 )
+            R = sqrt( (tan(pi/2 - (pursu_angle))*self.rho/2)**2 +
+                    (self.rho/2.0)**2 )
             if pursu_angle < 0: # alpha = [0,-pi]
                 R = -R
             
@@ -564,14 +563,17 @@ if __name__ == '__main__':
     KP_VEL = rospy.get_param(param_name="~kp_vel", default="1")
     LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
     GOAL_TOLERANCE_XY = rospy.get_param(param_name="~goal_tolerance_xy", default="0.1")
-    GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_xy", default="0.0785")
-    CRAB_REGION = pi/6 # radian
-    BETA_HEADING_ADJ_REGION = pi/40
-    # System 
+    GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_t", default="10")
+    GOAL_TOLERANCE_T *= pi/180.0
+    ASIDE_GOAL_ANG = rospy.get_param(param_name="~aside_goal_ang", default="60") # Degree
+    ASIDE_GOAL_ANG *= pi/180.0
+    ROTA_ANGULAR_VEL = rospy.get_param(param_name="~rota_angular_vel", default="0.2") # radian/s
+    
+    # System 0
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     SIM  = rospy.get_param(param_name="~sim", default="true")
     REVERSE_OMEGA = rospy.get_param(param_name="~reverse_omega", default="false")
-    IGNORE_HEADING = False
+    IGNORE_HEADING = rospy.get_param(param_name="~ignore_heading", default="false")
     # Tf frame
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
     MAP_PEER_FRAME     = rospy.get_param(param_name="~map_peer_frame", default="map")
