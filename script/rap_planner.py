@@ -29,6 +29,7 @@ class Rap_planner():
         # Publisher
         self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
         self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
+        self.pub_marker_text = rospy.Publisher("/rap_planner/text", MarkerArray,queue_size = 1,latch=False)
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
         # Debug publisher
         self.pub_alpha = rospy.Publisher("/alpha", Float64,queue_size = 1,latch=False)
@@ -40,6 +41,7 @@ class Rap_planner():
         # 
         self.marker_point = MarkerArray()
         self.marker_line = MarkerArray()# Line markers show on RVIZ
+        self.marker_text = MarkerArray()
         # Output
         self.vx_out = None
         self.vy_out = None
@@ -154,8 +156,7 @@ class Rap_planner():
         '''
         self.costmap = data
         print (self.costmap.info)
-        
-
+    
     def get_tf(self,frame_id, child_frame_id):
         '''
         get tf frame_id -> child_frame_id
@@ -247,8 +248,10 @@ class Rap_planner():
         # Debug Markers
         self.pub_marker_point.publish(self.marker_point)
         self.pub_marker_line.publish(self.marker_line)
+        self.pub_marker_text.publish(self.marker_text)
         self.marker_line = MarkerArray()
         self.marker_point = MarkerArray()
+        self.marker_text = MarkerArray()
         # Dubug msg
         self.pub_alpha.publish(self.alpha)
         self.pub_beta.publish(self.beta)
@@ -490,12 +493,18 @@ class Rap_planner():
 
         # Debug print
         #  TODO dev rviz text msg to show mode
+        '''
         if self.mode == "tran":
             rospy.loginfo("[rap_planner] " + self.mode + ":" + self.previous_mode\
                           + "->" + self.next_mode)
         else:
             rospy.loginfo("[rap_planner] " + self.mode)
-        
+        '''
+        if self.mode == "tran":
+            text = str(self.previous_mode) + "->" + self.next_mode
+        else:
+            text = self.mode
+        self.set_text((0,-0.5), BIG_CAR_FRAME, text, (0,0,0), 0.2, 0)
 
         # Latch count 
         if self.mode_latch_counter > 0:
@@ -503,7 +512,7 @@ class Rap_planner():
 
         return True 
 
-    def set_line(self, points,frame_id, RGB = None , size = 0.2, id = 0):
+    def set_line(self, points, frame_id, RGB = (255,0,0), size = 0.2, id = 0):
         '''
         Set line at MarkArray
         Input : 
@@ -523,14 +532,9 @@ class Rap_planner():
         marker.scale.y = size
         marker.scale.z = size
         marker.color.a = 1.0
-        if RGB == None : 
-            marker.color.r = random.randint(0,255) / 255.0
-            marker.color.g = random.randint(0,255) / 255.0
-            marker.color.b = random.randint(0,255) / 255.0
-        else: 
-            marker.color.r = RGB[0]/255.0
-            marker.color.g = RGB[1]/255.0
-            marker.color.b = RGB[2]/255.0
+        marker.color.r = RGB[0]/255.0
+        marker.color.g = RGB[1]/255.0
+        marker.color.b = RGB[2]/255.0
         marker.pose.orientation.w = 1.0
         for i in points:
             p = Point()
@@ -539,7 +543,7 @@ class Rap_planner():
             marker.points.append(p)
         self.marker_line.markers.append(marker)
 
-    def set_sphere(self, point, frame_id , RGB = None  , size = 0.05, id = 0):
+    def set_sphere(self, point, frame_id, RGB = (255,0,0), size = 0.05, id = 0):
         '''
         Set Point at MarkArray 
         Input : 
@@ -557,17 +561,38 @@ class Rap_planner():
         marker.scale.y = size
         marker.scale.z = size
         marker.color.a = 1.0
-        if RGB == None : 
-            marker.color.r = random.randint(0,255) / 255.0
-            marker.color.g = random.randint(0,255) / 255.0
-            marker.color.b = random.randint(0,255) / 255.0
-        else: 
-            marker.color.r = RGB[0]/255.0
-            marker.color.g = RGB[1]/255.0
-            marker.color.b = RGB[2]/255.0
+        marker.color.r = RGB[0]/255.0
+        marker.color.g = RGB[1]/255.0
+        marker.color.b = RGB[2]/255.0
         marker.pose.orientation.w = 1.0
         (marker.pose.position.x , marker.pose.position.y) = point
         self.marker_point.markers.append(marker)
+
+    def set_text(self, point, frame_id, text, RGB = (255,0,0), size = 0.2, id = 0):
+        '''
+        Set Point at MarkArray 
+        Input : 
+            point - (x,y) or idx 
+            RGB - (r,g,b)
+        '''
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.id = id
+        marker.ns = "tiles"
+        marker.header.stamp = rospy.get_rostime()
+        marker.type = marker.TEXT_VIEW_FACING
+        marker.action = marker.ADD
+        marker.scale.x = size
+        marker.scale.y = size
+        marker.scale.z = size
+        marker.color.a = 1.0
+        marker.text = text 
+        marker.color.r = RGB[0]/255.0
+        marker.color.g = RGB[1]/255.0
+        marker.color.b = RGB[2]/255.0
+        marker.pose.orientation.w = 1.0
+        (marker.pose.position.x , marker.pose.position.y) = point
+        self.marker_text.markers.append(marker)
 
 #######################
 ### Global function ###
