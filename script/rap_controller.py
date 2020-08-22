@@ -21,11 +21,13 @@ KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase
 KP_diff = 1.5 # KP fro diff mode
 KI = 0
 
-LEFT_ROTATION_SUPREMACY = 0.5 # radian
+# If Radius small then this value, switch to rota controller
 INPLACE_ROTATION_R = 0.1  # meter
 # How precise transition it needs to be.
 TRANSITION_ANG_TOLERANCE = 10 # degree
 TRANSITION_ANG_TOLERANCE *= pi/180.0
+# Crab dead zone, car1, car2 heading can't go here
+DEAD_ZONE_ANG = pi/2
 
 class Rap_controller():
     def __init__(self, 
@@ -163,12 +165,10 @@ class Rap_controller():
             v_con = vx
             w_con = self.pi_controller(KP_diff, KI, error)
         else:
-            v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
-            if abs(R) < INPLACE_ROTATION_R:# TODO
-                w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
-                if ref_ang < 0: # ref_ang == -pi/2
-                    v_con *= -1
+            if abs(R) < INPLACE_ROTATION_R:
+                (v_con, w_con) = self.rota_controller(wz, error, ref_ang)
             else:
+                v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
                 if not is_same_sign(vx,v_con):
                     v_con *= -1
                 w_con = sign(vx)*wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
@@ -178,8 +178,7 @@ class Rap_controller():
         '''
         Inplace rotation controller
         '''
-        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error)) # TODO test
-        # v_con = (sqrt(R**2 + (TOW_CAR_LENGTH/2.0)**2)*wz) *abs(cos(error))
+        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
         w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         if ref_ang < 0: # ref_ang == -pi/2
             v_con = -v_con
@@ -208,12 +207,6 @@ class Rap_controller():
         if not is_same_sign(R, self.Vx):
             ref_ang_L *= -1
         
-        # in-place rotation # TODO use both leader follower to decide 
-        if abs(R) < INPLACE_ROTATION_R:
-            if  abs(normalize_angle( ref_ang_L - self.theta_L)) -\
-                abs(normalize_angle(-ref_ang_L - self.theta_L)) > LEFT_ROTATION_SUPREMACY:
-                ref_ang_L *= -1
-        
         # Follower reverse ref_ang
         ref_ang_F = normalize_angle(pi - ref_ang_L)
         
@@ -221,31 +214,46 @@ class Rap_controller():
         error_theta_L = normalize_angle(ref_ang_L - self.theta_L)
         error_theta_F = normalize_angle(ref_ang_F - self.theta_F)
 
+        # In-place rotation, Find the nearest 90 degree to ref.
+        if  abs(R) < INPLACE_ROTATION_R and\
+            abs(error_theta_L) > pi/2 and\
+            abs(error_theta_F) > pi/2:
+            # ref_ang_L and ref_ang_F must have same sign
+            ref_ang_L *= -1
+            ref_ang_F *= -1
+            error_theta_L = normalize_angle(ref_ang_L - self.theta_L)
+            error_theta_F = normalize_angle(ref_ang_F - self.theta_F)
+
         return ((ref_ang_L, error_theta_L), (ref_ang_F, error_theta_F))
 
     def crab_get_error_angle(self):
         '''
         Input:
-            self.Vy
             self.Vx
+            self.Vy
             self.theta
         Return ( (ref_ang, error_theta) , (ref_ang, error_theta) , T/F)
                  ^ leader                  ^ follower
         '''        
         # Get refenrence angle
-        is_forward = True
         ref_ang_L = atan2(self.Vy, self.Vx)
-        if ref_ang_L > 3*pi/4 or ref_ang_L < -3*pi/4: # Go backward # TODO need debug
-            is_forward = False
-            ref_ang_L = normalize_angle(atan2(self.Vy, self.Vx) + pi)
-        
-        # Follower reverse ref_angle
-        ref_ang_F = ref_ang_L + pi
+        ref_ang_F = normalize_angle(ref_ang_L + pi)
         
         # Get error angle
         error_theta_L = normalize_angle(ref_ang_L - self.theta_L)
         error_theta_F = normalize_angle(ref_ang_F - self.theta_F)
 
+        # Go backward or forward? 
+        is_forward = True
+        if  abs(error_theta_L) > pi/2 and\
+            abs(error_theta_F) > pi/2 and\
+            (not(self.Vx == 0 and self.Vy == 0)):
+            is_forward = False
+            ref_ang_L = normalize_angle(ref_ang_L + pi)
+            ref_ang_F = normalize_angle(ref_ang_F + pi)
+            error_theta_L = normalize_angle(ref_ang_L - self.theta_L)
+            error_theta_F = normalize_angle(ref_ang_F - self.theta_F)
+        
         return ((ref_ang_L, error_theta_L), (ref_ang_F, error_theta_F), is_forward)
 
     def run_once(self):
@@ -529,7 +537,7 @@ if __name__ == '__main__':
     # Init rap controller
     RAP_CTL = Rap_controller("car1", 
                              SIM,
-                             CONTROL_FREQ, 
+                             CONTROL_FREQ,
                              REVERSE_OMEGA,
                              # Tf frame id 
                              MAP_FRAME, 
