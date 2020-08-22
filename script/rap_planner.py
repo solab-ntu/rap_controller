@@ -8,19 +8,22 @@ from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from geometry_msgs.msg import Point, Twist, PoseStamped
-from nav_msgs.msg import Path
-
+from nav_msgs.msg import Path, OccupancyGrid
 import time # for testing 
 from rap_controller import Rap_controller
 
 NUM_CIRCLE_POINT = 100
 USE_CRAB_FOR_HEADING = True
+USE_COSTMAP = True
 
 class Rap_planner():
     def __init__(self):
         # Subscriber
         rospy.Subscriber(GLOBAL_PATH_TOPIC, Path, self.path_cb)
         rospy.Subscriber(GOAL_TOPIC, PoseStamped, self.goal_cb)
+        if USE_COSTMAP:
+            rospy.Subscriber(COSTMAP_TOPIC,OccupancyGrid ,self.costmap_cb)
+            self.costmap = None
         self.global_path = None #
         self.simple_goal = None #
         # Publisher
@@ -125,6 +128,33 @@ class Rap_planner():
                 float64 w
         '''
         self.global_path = data
+
+    def costmap_cb(self, data):
+        '''
+        std_msgs/Header header
+            uint32 seq
+            time stamp
+            string frame_id
+        nav_msgs/MapMetaData info
+            time map_load_time
+            float32 resolution
+            uint32 width
+            uint32 height
+            geometry_msgs/Pose origin
+                geometry_msgs/Point position
+                float64 x
+                float64 y
+                float64 z
+                geometry_msgs/Quaternion orientation
+                float64 x
+                float64 y
+                float64 z
+                float64 w
+        int8[] data - 0~100 , 0: free space , 100: obstacle
+        '''
+        self.costmap = data
+        print (self.costmap.info)
+        
 
     def get_tf(self,frame_id, child_frame_id):
         '''
@@ -367,7 +397,7 @@ class Rap_planner():
         if  self.latch_xy or\
             (USE_CRAB_FOR_HEADING and\
             need_consider_heading and\
-            abs(d_head) > (GOAL_TOLERANCE_T*2)): # TODO # ROTA, cause occlication
+            abs(d_head) > (GOAL_TOLERANCE_T/2.0)): # TODO # ROTA, cause occlication
             # need to adjust heading
             is_need_rota = True
         
@@ -442,7 +472,7 @@ class Rap_planner():
         elif self.mode == "rota" or (self.mode == "tran" and self.next_mode == "rota"):
             self.vx_out = 0.0
             self.vy_out = 0.0
-            self.wz_out = ROTA_ANGULAR_VEL* sign(d_head)
+            self.wz_out = ROTA_ANGULAR_VEL*sign(d_head)
         elif self.mode == "diff" or (self.mode == "tran" and self.next_mode == "diff"):
             # Get R 
             R = sqrt( (tan(pi/2 - (pursu_angle))*self.rho/2)**2 +
@@ -459,11 +489,13 @@ class Rap_planner():
             rospy.logerr("[rap_planner] Invalid mode " + str(self.mode))
 
         # Debug print
+        #  TODO dev rviz text msg to show mode
         if self.mode == "tran":
             rospy.loginfo("[rap_planner] " + self.mode + ":" + self.previous_mode\
                           + "->" + self.next_mode)
         else:
             rospy.loginfo("[rap_planner] " + self.mode)
+        
 
         # Latch count 
         if self.mode_latch_counter > 0:
@@ -594,7 +626,7 @@ if __name__ == '__main__':
     CMD_VEL_TOPIC_LEADER = rospy.get_param(param_name="~cmd_vel_topic_leader", default="/car1/cmd_vel")
     CMD_VEL_TOPIC_FOLLOW = rospy.get_param(param_name="~cmd_vel_topic_follower", default="/car2/cmd_vel")
     GOAL_TOPIC = rospy.get_param(param_name="~goal_topic", default="/move_base_simple/goal")
-    
+    COSTMAP_TOPIC = rospy.get_param(param_name="~costmap_topic", default="/move_base/local_costmap/costmap")
     # Global variable
     # Init naive controller
     rap_planner   = Rap_planner()
