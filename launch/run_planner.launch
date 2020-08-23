@@ -3,9 +3,9 @@
     <arg name="robot_name" default="car1"/>
     <node pkg="rap_controller" type="rap_planner.py" name="rap_planner" output='screen'>
         <!-- Kinematic -->
-        <param name="kp_vel" value="0.2"/>
+        <param name="kp_vel" value="0.1"/>
         <param name="look_ahead_dist" value="0.8"/>
-        <param name="goal_tolerance" value="0.1"/>
+        <param name="goal_tolerance_xy" value="0.1"/>
         <param name="goal_tolerance_t" value="10"/> <!-- degree-->
         <param name="aside_goal_ang" value="60"/> <!-- degree-->
         <param name="rota_angular_vel" value="0.2"/> <!-- radian/s-->
@@ -13,7 +13,7 @@
         <param name="ctl_frequency" value="30"/>
         <param name="sim" value="false"/>
         <param name="reverse_omega" value="false"/>
-        <param name="ignore_heading" value="true"/>
+        <param name="ignore_heading" value="false"/>
         <param name="mode_switch_latch" value="2"/> <!--sec-->
         <!-- Tf Frame-->
         <param name="map_frame" value="$(arg robot_name)/map"/>

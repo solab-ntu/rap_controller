@@ -366,7 +366,7 @@ class Rap_controller():
         self.set_line([(-TOW_CAR_LENGTH/2,0), p], self.big_car_frame_leader,
                       RGB = (0,0,255), size = 0.03 ,id = 2)#
         # Follower current ang
-        self.set_line([(0,0), (0.6,0)], self.base_link_frame_follow,
+        self.set_line([(0,0), (0.6,0)], self.base_link_frame_leader,
                       RGB = (102,178,255), size = 0.03 ,id = 3)
         return True # Enable publish
 

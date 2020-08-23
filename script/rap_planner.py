@@ -416,9 +416,9 @@ class Rap_planner():
         
         self.set_line(((0,0), (0.3,0)), BIG_CAR_FRAME,
                       RGB = (255,255,0), size = 0.02, id = 0)
-        # self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
-        #                        sin(alpha)*LOOK_AHEAD_DIST,)),
-        #               BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
+        self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
+                               sin(alpha)*LOOK_AHEAD_DIST,)),
+                      BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
         # if local_goal[2] != None:
         #     self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
         #                                       y_goal + sin(pursu_angle)*0.3)),
