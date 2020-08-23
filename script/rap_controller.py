@@ -35,6 +35,7 @@ class Rap_controller():
                  reverse_omega,
                  # tf frame id 
                  map_frame, 
+                 map_peer_frame
                  base_link_frame_leader,
                  base_link_frame_follow,
                  big_car_frame_leader, 
@@ -50,6 +51,7 @@ class Rap_controller():
         self.reverse_omega = reverse_omega
         # Tf frame id 
         self.map_frame = map_frame
+        self.map_peer_frame = map_peer_frame
         self.base_link_frame_leader = base_link_frame_leader
         self.base_link_frame_follow = base_link_frame_follow
         self.big_car_frame_leader   = big_car_frame_leader
@@ -262,9 +264,9 @@ class Rap_controller():
         '''
         # Update tf
         t_base_link_L = self.get_tf(self.map_frame, self.base_link_frame_leader)
-        t_base_link_F = self.get_tf(self.map_frame, self.base_link_frame_follow)
+        t_base_link_F = self.get_tf(self.map_peer_frame, self.base_link_frame_follow)
         t_big_car_L   = self.get_tf(self.map_frame, self.big_car_frame_leader)
-        t_big_car_F   = self.get_tf(self.map_frame, self.big_car_frame_follow)
+        t_big_car_F   = self.get_tf(self.map_peer_frame, self.big_car_frame_follow)
 
         if t_base_link_L != None:
             self.base_link_xyt_L = t_base_link_L
@@ -523,6 +525,7 @@ if __name__ == '__main__':
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
     # TF frame id 
     MAP_FRAME     = rospy.get_param(param_name="~map_frame", default="map")
+    MAP_PEER_FRAME = rospy.get_param(param_name="~map_peer_frame", default="map")
     BIG_CAR_FRAME = rospy.get_param(param_name="~big_car_frame", default="/car1/center_big_car")
     BIG_CAR_PEER_FRAME = rospy.get_param(param_name="~big_car_peer_frame", default="/car2/center_big_car")
     BASE_LINK_FRAME = rospy.get_param(param_name="~base_link_frame", default="base_link")
@@ -537,7 +540,8 @@ if __name__ == '__main__':
                              CONTROL_FREQ,
                              REVERSE_OMEGA,
                              # Tf frame id 
-                             MAP_FRAME, 
+                             MAP_FRAME,
+                             MAP_PEER_FRAME,
                              BASE_LINK_FRAME,
                              BASE_PEER_FRAME,
                              BIG_CAR_FRAME,

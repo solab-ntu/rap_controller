@@ -657,7 +657,8 @@ if __name__ == '__main__':
                              CONTROL_FREQ, 
                              REVERSE_OMEGA,
                              # Tf frame id 
-                             MAP_FRAME, 
+                             MAP_FRAME,
+                             MAP_PEER_FRAME,
                              BASE_LINK_FRAME,
                              BASE_PEER_FRAME,
                              BIG_CAR_FRAME,
