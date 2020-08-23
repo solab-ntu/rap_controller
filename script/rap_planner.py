@@ -336,6 +336,7 @@ class Rap_planner():
         self.vy_out = 0.0
         self.wz_out = 0.0
         self.mode = "diff"
+        self.mode_latch_counter = 0
         self.previous_mode = "diff"
         self.next_mode = None
         self.global_path = None
