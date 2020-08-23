@@ -14,7 +14,7 @@ from rap_controller import Rap_controller
 
 NUM_CIRCLE_POINT = 100
 USE_CRAB_FOR_HEADING = True
-USE_COSTMAP = False
+USE_COSTMAP = False # TODO deving 
 
 class Rap_planner():
     def __init__(self):
@@ -156,7 +156,41 @@ class Rap_planner():
         '''
         self.costmap = data
         # print (self.costmap.info)
-    
+        # print (data.data[self.costmap.info.width/2 +  (self.costmap.info.height/2)*self.costmap.info.width])
+
+    def idx2XY (self, idx):
+        '''
+        transfer map idx into (x,y) coordinate
+        Input : 
+            idx - must be interger , idx must inside map index.
+        Output: 
+            (x,y) - turple 
+        '''
+        width = self.costmap.info.width
+        reso  = self.costmap.info.resolution
+        origin = (self.costmap.info.origin.position.x , self.costmap.info.origin.position.y)
+
+        x = (idx % width) * reso + origin[0] + reso/2 # Center of point 
+        y = math.floor(idx / width) * reso + origin[1] + reso/2 
+        return (round(x,3), round(y,3))
+
+    def XY2idx(self, XY_coor):
+        '''
+        transfer (x,y) coordinate into  map index 
+        Input : 
+            XY_coor : (x,y) - turple 
+        Output: 
+            idx
+        '''
+        width = self.costmap.info.width
+        reso  = self.costmap.info.resolution
+        origin = (self.costmap.info.origin.position.x , self.costmap.info.origin.position.y)
+        # Y 
+        idx =  round((XY_coor[1] - origin[1]) / reso - 0.5) * width
+        # X 
+        idx += round((XY_coor[0] - origin[0]) / reso - 0.5)
+        return int(idx)
+
     def get_tf(self,frame_id, child_frame_id):
         '''
         get tf frame_id -> child_frame_id
@@ -239,6 +273,23 @@ class Rap_planner():
             print (self.global_path.poses)
             return False
         self.global_path.poses = self.global_path.poses[prune_point:]
+
+
+        # TODO costmap test
+        if USE_COSTMAP:
+            costmap_idx = self.XY2idx((self.big_car_xyt[:2]))
+            value = self.costmap.data[costmap_idx]
+            print (value)
+
+            tmp_id = 100
+            for idx in range(len(self.global_path.poses)):
+                x = self.global_path.poses[idx].pose.position.x
+                y = self.global_path.poses[idx].pose.position.y
+                costmap_idx = self.XY2idx((x,y))
+                value = self.costmap.data[costmap_idx]
+                if value != 0:
+                    self.set_sphere((x, y) , MAP_FRAME, (0,255,255)  , 0.1, tmp_id)
+                    tmp_id += 1
         return True
 
     def publish(self):
@@ -365,9 +416,9 @@ class Rap_planner():
         
         self.set_line(((0,0), (0.3,0)), BIG_CAR_FRAME,
                       RGB = (255,255,0), size = 0.02, id = 0)
-        self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
-                               sin(alpha)*LOOK_AHEAD_DIST,)),
-                      BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
+        # self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
+        #                        sin(alpha)*LOOK_AHEAD_DIST,)),
+        #               BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
         # if local_goal[2] != None:
         #     self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
         #                                       y_goal + sin(pursu_angle)*0.3)),
