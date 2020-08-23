@@ -485,6 +485,11 @@ class Rap_planner():
             if self.latch_xy and (not IGNORE_HEADING):
                 self.set_tran_mode("rota")
             else:
+                if is_aside_goal:
+                    self.set_tran_mode("crab")
+                else:
+                    pass
+                '''
                 if need_consider_heading:
                     if USE_CRAB_FOR_HEADING:
                         # Current diff can't heading adj
@@ -497,7 +502,7 @@ class Rap_planner():
                         self.set_tran_mode("crab")
                     else:
                         pass
-        
+                '''
         elif self.mode == "rota":
             if need_consider_heading:
                 if is_need_rota:
