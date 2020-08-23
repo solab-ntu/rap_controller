@@ -35,7 +35,7 @@ class Rap_controller():
                  reverse_omega,
                  # tf frame id 
                  map_frame, 
-                 map_peer_frame
+                 map_peer_frame,
                  base_link_frame_leader,
                  base_link_frame_follow,
                  big_car_frame_leader, 
