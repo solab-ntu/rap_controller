@@ -523,8 +523,8 @@ class Rap_planner():
         ### Execute mode ###
         ####################
         if self.mode == "crab" or (self.mode == "tran" and self.next_mode == "crab"):
-            self.vx_out = cos(alpha) * KP_VEL
-            self.vy_out = sin(alpha) * KP_VEL
+            self.vx_out = cos(alpha) * CRAB_KP_VEL
+            self.vy_out = sin(alpha) * CRAB_KP_VEL
             self.wz_out = 0.0
         elif self.mode == "rota" or (self.mode == "tran" and self.next_mode == "rota"):
             self.vx_out = 0.0
@@ -540,9 +540,14 @@ class Rap_planner():
                         (LOOK_AHEAD_DIST/2.0)**2 )
             if pursu_angle < 0: # alpha = [0,-pi]
                 R = -R
-            self.vx_out = sqrt(x_goal**2 + y_goal**2) * KP_VEL
+            self.vx_out = sqrt(x_goal**2 + y_goal**2) * DIFF_KP_VEL
             self.vy_out = 0.0
-            self.wz_out = self.vx_out / R
+            # TODO test this , to avoid near-goal weird things
+            if self.rho < LOOK_AHEAD_DIST:
+                self.wz_out = (self.vx_out / R) * (self.rho/LOOK_AHEAD_DIST)
+            else:
+                self.wz_out = (self.vx_out / R)
+            
             if abs(pursu_angle) > pi/2: # Go backward
                 self.vx_out *= -1.0
         else:
@@ -675,7 +680,8 @@ if __name__ == '__main__':
     #########################
     # Get launch file parameters
     # Kinematic
-    KP_VEL = rospy.get_param(param_name="~kp_vel", default="1")
+    CRAB_KP_VEL = rospy.get_param(param_name="~crab_kp_vel", default="1")
+    DIFF_KP_VEL = rospy.get_param(param_name="~diff_kp_vel", default="2")
     LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
     GOAL_TOLERANCE_XY = rospy.get_param(param_name="~goal_tolerance_xy", default="0.1")
     GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_t", default="10")*pi/180

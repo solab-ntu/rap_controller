@@ -3,7 +3,8 @@
     <arg name="robot_name" default="car1"/>
     <node pkg="rap_controller" type="rap_planner.py" name="rap_planner" output='screen'>
         <!-- Kinematic -->
-        <param name="kp_vel" value="0.1"/>
+        <param name="crab_kp_vel" value="0.1"/>
+        <param name="diff_kp_vel" value="0.2"/>
         <param name="look_ahead_dist" value="0.8"/>
         <param name="goal_tolerance_xy" value="0.1"/>
         <param name="goal_tolerance_t" value="10"/> <!-- degree-->
