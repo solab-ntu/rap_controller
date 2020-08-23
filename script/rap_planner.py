@@ -398,10 +398,10 @@ class Rap_planner():
             need_consider_heading = True
         # Check need to switch to rota
         is_need_rota = False # current rota only when heading adjment
-        if  self.latch_xy or\
-            (USE_CRAB_FOR_HEADING and\
-            need_consider_heading and\
-            abs(d_head) > (GOAL_TOLERANCE_T/2.0)): # TODO # ROTA, cause occlication
+        if  self.latch_xy: #or\
+            #(USE_CRAB_FOR_HEADING and\
+            #need_consider_heading and\
+            #abs(d_head) > (GOAL_TOLERANCE_T/2.0)): # TODO # ROTA, cause occlication
             # need to adjust heading
             is_need_rota = True
         
@@ -436,7 +436,8 @@ class Rap_planner():
                 if need_consider_heading:
                     if USE_CRAB_FOR_HEADING:
                         # Current diff can't heading adj
-                        self.set_tran_mode("rota")
+                        # self.set_tran_mode("rota")
+                        pass
                     else:
                         pass # Stay here
                 else:
