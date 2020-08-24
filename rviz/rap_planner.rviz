@@ -576,7 +576,7 @@ Visualization Manager:
       Marker Topic: /rap_planner/markers
       Name: MarkerArray
       Namespaces:
-        tiles: true
+        {}
       Queue Size: 100
       Value: true
   Enabled: true

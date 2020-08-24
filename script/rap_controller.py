@@ -9,6 +9,7 @@ from geometry_msgs.msg import Point, Twist# topic /cmd_vel
 from lucky_utility.ros.rospy_utility import get_tf,normalize_angle,\
                                             sign,is_same_sign, Marker_Manager
 from visualization_msgs.msg import MarkerArray
+import time # for testing
 #########################
 ### Global parameters ###
 #########################
@@ -296,6 +297,7 @@ class Rap_controller():
         
         if  self.base_link_xyt_L == None or self.big_car_xyt_L == None or\
             self.base_link_xyt_F == None or self.big_car_xyt_F == None: #tf is invalid
+            time.sleep(1)
             return False
         
         # Get current theta

@@ -3,7 +3,7 @@ import rospy
 import sys
 import tf2_ros
 import tf # conversion euler
-from math import atan2,acos,sqrt,pi,sin,cos,tans
+from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from geometry_msgs.msg import Point, Twist, PoseStamped
@@ -315,6 +315,7 @@ class Rap_planner():
         if t_big_car != None:
             self.big_car_xyt = t_big_car
         if self.big_car_xyt == None: #tf is invalid
+            time.sleep(1)
             return False
         
         # Get Local goal
@@ -573,5 +574,5 @@ if __name__ == '__main__':
             if RAP_CTL.run_once():
                 RAP_CTL.publish()
         except Exception as e:
-            rospy.logerror(e)
+            rospy.logerr(e)
         rate.sleep()
