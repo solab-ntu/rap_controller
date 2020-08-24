@@ -3,7 +3,6 @@ import rospy
 import sys
 import tf2_ros
 import tf # conversion euler
-import random
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
@@ -11,10 +10,11 @@ from geometry_msgs.msg import Point, Twist, PoseStamped
 from nav_msgs.msg import Path, OccupancyGrid
 import time # for testing 
 from rap_controller import Rap_controller
-
+from lucky_utility.ros.rospy_utility import get_tf, Marker_Manager,normalize_angle,sign
+                                            
 NUM_CIRCLE_POINT = 100
 USE_CRAB_FOR_HEADING = True
-USE_COSTMAP = False # TODO deving 
+USE_COSTMAP = False # TODO Giving up 
 
 class Rap_planner():
     def __init__(self):
@@ -27,9 +27,7 @@ class Rap_planner():
         self.global_path = None #
         self.simple_goal = None #
         # Publisher
-        self.pub_marker_point = rospy.Publisher("/local_goal", MarkerArray,queue_size = 1,latch=False)
-        self.pub_marker_line = rospy.Publisher("/rap_planner/angles", MarkerArray,queue_size = 1,latch=False)
-        self.pub_marker_text = rospy.Publisher("/rap_planner/text", MarkerArray,queue_size = 1,latch=False)
+        self.viz_marker = Marker_Manager("/rap_planner/markers")
         self.pub_global_path = rospy.Publisher("/rap_planner/global_path", Path,queue_size = 1,latch=False)
         # Debug publisher
         self.pub_alpha = rospy.Publisher("/alpha", Float64,queue_size = 1,latch=False)
@@ -38,10 +36,6 @@ class Rap_planner():
         self.beta = 0.0
         self.pub_angle = rospy.Publisher("/angle", Float64,queue_size = 1,latch=False)
         self.angle = 0.0
-        # Debug markers
-        self.marker_point = MarkerArray()
-        self.marker_line = MarkerArray()# Line markers show on RVIZ
-        self.marker_text = MarkerArray()
         # Output
         self.vx_out = None
         self.vy_out = None
@@ -57,29 +51,31 @@ class Rap_planner():
         self.next_mode = None
         self.latch_xy = False
         self.mode_latch_counter = 0
+        # Init RVIZ markers
+        self.viz_marker.register_marker("local_goal", 2, 
+                                         BIG_CAR_FRAME, (0,255,255), 0.1)
+        self.viz_marker.register_marker("goal_head", 4,
+                                        BIG_CAR_FRAME, (255,255,255), 0.02)
+        # self.viz_marker.register_marker("circle_diff", 4,
+        #                                 BIG_CAR_FRAME, (255,255,0), 0.02)
+        # self.viz_marker.register_marker("circle_crab", 4,
+        #                                 BIG_CAR_FRAME, (255,0,0), 0.02)
+        self.viz_marker.register_marker("mode_text", 9,
+                                         BIG_CAR_FRAME, (0,0,0),  0.2)
+        self.viz_marker.register_marker("a1_diff", 4, BIG_CAR_FRAME, (255,255,0), 0.02)
+        self.viz_marker.register_marker("a2_diff", 4, BIG_CAR_FRAME, (255,255,0), 0.02)
+        self.viz_marker.register_marker("a1_crab", 4, BIG_CAR_FRAME, (255,0,0), 0.02)
+        self.viz_marker.register_marker("a2_crab", 4, BIG_CAR_FRAME, (255,0,0), 0.02)
+        self.viz_marker.update_marker("a1_diff", (0,0), radius = LOOK_AHEAD_DIST,
+                    angle_range = (-pi/2 + ASIDE_GOAL_ANG/2,  pi/2 - ASIDE_GOAL_ANG/2))
+        self.viz_marker.update_marker("a2_diff", (0,0), radius = LOOK_AHEAD_DIST,
+                    angle_range = ( pi/2 + ASIDE_GOAL_ANG/2, -pi/2 - ASIDE_GOAL_ANG/2))
+        self.viz_marker.update_marker("a1_crab", (0,0), radius = LOOK_AHEAD_DIST,
+                    angle_range = (-pi/2 - ASIDE_GOAL_ANG/2, -pi/2 + ASIDE_GOAL_ANG/2))
+        self.viz_marker.update_marker("a2_crab", (0,0), radius = LOOK_AHEAD_DIST,
+                    angle_range = ( pi/2 - ASIDE_GOAL_ANG/2,  pi/2 + ASIDE_GOAL_ANG/2))
         # Init marker circle
-        self.point_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
-        ang = 0.0
-        while ang <= 2*pi:
-            belong = ""
-            if abs(abs(normalize_angle(ang)) - pi/2) < (ASIDE_GOAL_ANG/2.0):
-                belong = "crab"
-            else:
-                belong = "diff"
-            # Find nearest line-segment to append
-            x = LOOK_AHEAD_DIST*cos(ang)
-            y = LOOK_AHEAD_DIST*sin(ang)
-            is_found = False
-            for seg in self.point_list:
-                if  seg[0] == belong and \
-                    (seg[1][-1][0] - x)**2 + \
-                    (seg[1][-1][1] - y)**2 <= \
-                     LOOK_AHEAD_DIST*2*pi/NUM_CIRCLE_POINT:
-                     is_found = True
-                     seg[1].append((x,y))
-            if not is_found: # Creat a new segment
-                self.point_list.append([belong, [(x,y)]])
-            ang += 2*pi/NUM_CIRCLE_POINT
+        # self.point_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
 
     def goal_cb(self, data):
         '''
@@ -191,33 +187,6 @@ class Rap_planner():
         idx += round((XY_coor[0] - origin[0]) / reso - 0.5)
         return int(idx)
 
-    def get_tf(self,frame_id, child_frame_id):
-        '''
-        get tf frame_id -> child_frame_id
-        Arguments:
-            frame_id(str): e.g: "map", "odom"
-            child_frame_id(str): e.g: "base_link"
-        Return:
-            (x,y,theta)
-            None, if tf is unvaliable
-        '''
-        try:
-            t = self.tfBuffer.lookup_transform(frame_id,
-                                               child_frame_id,
-                                               rospy.Time(),
-                                               rospy.Duration(0.1))
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + frame_id + " -> " + child_frame_id)
-            return None
-        else:
-            quaternion = (
-                t.transform.rotation.x,
-                t.transform.rotation.y,
-                t.transform.rotation.z,
-                t.transform.rotation.w)
-            euler = tf.transformations.euler_from_quaternion(quaternion)
-            return (t.transform.translation.x, t.transform.translation.y, euler[2])
-
     def get_local_goal(self):
         '''
         Return (x,y,theta)
@@ -288,7 +257,7 @@ class Rap_planner():
                 costmap_idx = self.XY2idx((x,y))
                 value = self.costmap.data[costmap_idx]
                 if value != 0:
-                    self.set_sphere((x, y) , MAP_FRAME, (0,255,255)  , 0.1, tmp_id)
+                    set_sphere(self.marker_point, (x, y) , MAP_FRAME, (0,255,255)  , 0.1, tmp_id)
                     tmp_id += 1
         return True
 
@@ -297,12 +266,8 @@ class Rap_planner():
         Publish debug thing
         '''
         # Debug Markers
-        self.pub_marker_point.publish(self.marker_point)
-        self.pub_marker_line.publish(self.marker_line)
-        self.pub_marker_text.publish(self.marker_text)
-        self.marker_line = MarkerArray()
-        self.marker_point = MarkerArray()
-        self.marker_text = MarkerArray()
+        self.viz_marker.publish()
+
         # Dubug msg
         self.pub_alpha.publish(self.alpha)
         self.pub_beta.publish(self.beta)
@@ -349,7 +314,7 @@ class Rap_planner():
             return False
         
         # Update tf
-        t_big_car   = self.get_tf(MAP_FRAME, BIG_CAR_FRAME)
+        t_big_car   = get_tf(self.tfBuffer, MAP_FRAME, BIG_CAR_FRAME)
         if t_big_car != None:
             self.big_car_xyt = t_big_car
         if self.big_car_xyt == None: #tf is invalid
@@ -407,34 +372,12 @@ class Rap_planner():
         # self.beta = beta
         # self.angle = pursu_angle
 
-        # Debug markers
-        # Local goal
-        self.set_sphere((x_goal, y_goal) , BIG_CAR_FRAME, (0,255,255)  , 0.1, 0)
-        # pursu_angle
-        # self.set_sphere((cos(pursu_angle)*LOOK_AHEAD_DIST,
-        #                  sin(pursu_angle)*LOOK_AHEAD_DIST,),
-        #                 BIG_CAR_FRAME, (255,0,255), 0.1, 1)
-        
-        self.set_line(((0,0), (0.3,0)), BIG_CAR_FRAME,
-                      RGB = (255,255,0), size = 0.02, id = 0)
-        self.set_line(((0,0), (cos(alpha)*LOOK_AHEAD_DIST, 
-                               sin(alpha)*LOOK_AHEAD_DIST,)),
-                      BIG_CAR_FRAME, RGB = (255,255,255), size = 0.02, id = 1)
-        # if local_goal[2] != None:
-        #     self.set_line(((x_goal, y_goal), (x_goal + cos(pursu_angle)*0.3,
-        #                                       y_goal + sin(pursu_angle)*0.3)),
-        #                 BIG_CAR_FRAME, RGB = (255,0,255), size = 0.02, id = 2)
-        
-        # Draw circle
-        for idx in range(len(self.point_list)):
-            belong = self.point_list[idx][0]
-            if belong == "diff":
-                color = (255,255,0)
-            else:
-                color = (255,0,0)
-            self.set_line(self.point_list[idx][1], BIG_CAR_FRAME, RGB = color,
-                          size = 0.02, id = idx+3)
-        
+        self.viz_marker.update_marker("local_goal", (x_goal, y_goal) )
+        p = (cos(alpha)*LOOK_AHEAD_DIST, sin(alpha)*LOOK_AHEAD_DIST)
+        self.viz_marker.update_marker("goal_head", ((0,0), p))
+        # self.viz_marker.update_marker("circle_diff")
+        # self.viz_marker.update_marker("circle_crab")
+
         ##################
         ###  Get Flags ###
         ##################
@@ -563,119 +506,13 @@ class Rap_planner():
             text = str(self.previous_mode) + "->" + self.next_mode
         else:
             text = self.mode
-        self.set_text((0,-0.5), BIG_CAR_FRAME, text, (0,0,0), 0.2, 0)
+        self.viz_marker.update_marker("mode_text", (0,-0.5), text)
 
         # Latch count 
         if self.mode_latch_counter > 0:
             self.mode_latch_counter -= 1
 
         return True 
-
-    def set_line(self, points, frame_id, RGB = (255,0,0), size = 0.2, id = 0):
-        '''
-        Set line at MarkArray
-        Input : 
-            points = [p1,p2....]
-            RGB - tuple : (255,255,255)
-            size - float: width of line
-            id - int
-        '''
-        marker = Marker()
-        marker.header.frame_id = frame_id
-        marker.id = id
-        marker.ns = "tiles"
-        marker.header.stamp = rospy.get_rostime()
-        marker.type = marker.LINE_STRIP
-        marker.action = marker.ADD
-        marker.scale.x = size
-        marker.scale.y = size
-        marker.scale.z = size
-        marker.color.a = 1.0
-        marker.color.r = RGB[0]/255.0
-        marker.color.g = RGB[1]/255.0
-        marker.color.b = RGB[2]/255.0
-        marker.pose.orientation.w = 1.0
-        for i in points:
-            p = Point()
-            p.x = i[0]
-            p.y = i[1]
-            marker.points.append(p)
-        self.marker_line.markers.append(marker)
-
-    def set_sphere(self, point, frame_id, RGB = (255,0,0), size = 0.05, id = 0):
-        '''
-        Set Point at MarkArray 
-        Input : 
-            point - (x,y)
-            RGB - (r,g,b)
-        '''
-        marker = Marker()
-        marker.header.frame_id = frame_id
-        marker.id = id
-        marker.ns = "tiles"
-        marker.header.stamp = rospy.get_rostime()
-        marker.type = marker.SPHERE
-        marker.action = marker.ADD
-        marker.scale.x = size
-        marker.scale.y = size
-        marker.scale.z = size
-        marker.color.a = 1.0
-        marker.color.r = RGB[0]/255.0
-        marker.color.g = RGB[1]/255.0
-        marker.color.b = RGB[2]/255.0
-        marker.pose.orientation.w = 1.0
-        (marker.pose.position.x , marker.pose.position.y) = point
-        self.marker_point.markers.append(marker)
-
-    def set_text(self, point, frame_id, text, RGB = (255,0,0), size = 0.2, id = 0):
-        '''
-        Set Point at MarkArray 
-        Input : 
-            point - (x,y) or idx 
-            RGB - (r,g,b)
-        '''
-        marker = Marker()
-        marker.header.frame_id = frame_id
-        marker.id = id
-        marker.ns = "tiles"
-        marker.header.stamp = rospy.get_rostime()
-        marker.type = marker.TEXT_VIEW_FACING
-        marker.action = marker.ADD
-        marker.scale.x = size
-        marker.scale.y = size
-        marker.scale.z = size
-        marker.color.a = 1.0
-        marker.text = text 
-        marker.color.r = RGB[0]/255.0
-        marker.color.g = RGB[1]/255.0
-        marker.color.b = RGB[2]/255.0
-        marker.pose.orientation.w = 1.0
-        (marker.pose.position.x , marker.pose.position.y) = point
-        self.marker_text.markers.append(marker)
-
-#######################
-### Global function ###
-#######################
-def sign(value):
-    if value >= 0:
-        return 1 
-    if value < 0:
-        return -1
-
-def normalize_angle(angle):
-    '''
-    Make angle inside range [-pi, pi]
-    Arguments:
-        angle - flaot
-    Return:
-        float
-    '''
-    ans = (abs(angle) % (2*pi))*sign(angle)
-    if ans < -pi: # [-2pi, -pi]
-        ans += 2*pi
-    elif ans > pi: # [pi, 2pi]
-        ans -= 2*pi
-    return ans
 
 if __name__ == '__main__':
     rospy.init_node('rap_planner',anonymous=False)

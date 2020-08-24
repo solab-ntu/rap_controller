@@ -1,0 +1,3 @@
+[submodule "script/lucky_utility"]
+	path = script/lucky_utility
+	url = https://github.com/spiderkiller13/lucky_utility.git

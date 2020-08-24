@@ -5,9 +5,10 @@ import tf2_ros
 import tf # conversion euler
 from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
-from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from geometry_msgs.msg import Point, Twist# topic /cmd_vel
-
+from lucky_utility.ros.rospy_utility import get_tf,normalize_angle,\
+                                            sign,is_same_sign, Marker_Manager
+from visualization_msgs.msg import MarkerArray
 #########################
 ### Global parameters ###
 #########################
@@ -61,7 +62,6 @@ class Rap_controller():
         # Publisher
         self.pub_cmd_vel_leader = rospy.Publisher(cmd_vel_topic_leader, Twist,queue_size = 1,latch=False)
         self.pub_cmd_vel_follow = rospy.Publisher(cmd_vel_topic_follow, Twist,queue_size = 1,latch=False)
-        self.pub_marker_line = rospy.Publisher("/"+robot_name+'/rap_angle_marker_line', MarkerArray,queue_size = 1,latch=False)
         # Parameters
         self.dt = 1.0 / self.control_freq
         # Tf listner
@@ -92,8 +92,16 @@ class Rap_controller():
         self.error_last = 0 
         self.sum_term = 0
         # Markers
-        self.marker_line = MarkerArray()# Line markers show on RVIZ
- 
+        self.viz_mark = Marker_Manager("/rap_controller/markers")
+        
+        self.viz_mark.register_marker("leader_ref", 4, self.big_car_frame_leader,
+                                      RGB = (0,0,255), size = 0.03)
+        self.viz_mark.register_marker("leader_cur", 4, self.base_link_frame_leader,
+                                      RGB = (102,178,255), size = 0.03)
+        self.viz_mark.register_marker("follow_ref", 4, self.big_car_frame_leader,
+                                      RGB = (0,0,255), size = 0.03)
+        self.viz_mark.register_marker("follow_cur", 4, self.big_car_frame_leader,
+                                      RGB = (102,178,255), size = 0.03)
     def cmd_cb(self,data):
         '''
         Topic /<robot_name>/cmd_vel callback function
@@ -263,10 +271,10 @@ class Rap_controller():
             False - Can't finish calculation, don't publish
         '''
         # Update tf
-        t_base_link_L = self.get_tf(self.map_frame, self.base_link_frame_leader)
-        t_base_link_F = self.get_tf(self.map_peer_frame, self.base_link_frame_follow)
-        t_big_car_L   = self.get_tf(self.map_frame, self.big_car_frame_leader)
-        t_big_car_F   = self.get_tf(self.map_peer_frame, self.big_car_frame_follow)
+        t_base_link_L = get_tf(self.tfBuffer, self.map_frame, self.base_link_frame_leader)
+        t_base_link_F = get_tf(self.tfBuffer, self.map_peer_frame, self.base_link_frame_follow)
+        t_big_car_L   = get_tf(self.tfBuffer, self.map_frame, self.big_car_frame_leader)
+        t_big_car_F   = get_tf(self.tfBuffer, self.map_peer_frame, self.big_car_frame_follow)
 
         if t_base_link_L != None:
             self.base_link_xyt_L = t_base_link_L
@@ -355,21 +363,16 @@ class Rap_controller():
         # Leader ref_ang
         p = (0.6*cos(ref_ang_L) + TOW_CAR_LENGTH/2.0
             ,0.6*sin(ref_ang_L))
-        self.set_line([(TOW_CAR_LENGTH/2,0), p], self.big_car_frame_leader,
-                      RGB = (0,0,255), size = 0.03 ,id = 0)#
+        self.viz_mark.update_marker("leader_ref", ((TOW_CAR_LENGTH/2,0), p))
         # Leader current ang
-        self.set_line([(0,0), (0.6,0)], self.base_link_frame_leader,
-                      RGB = (102,178,255), size = 0.03 ,id = 1)
-        # Follower ref_ang
+        self.viz_mark.update_marker("leader_cur", ((0,0), (0.6,0)))
         p = (0.6*cos(ref_ang_F) - TOW_CAR_LENGTH/2.0
             ,0.6*sin(ref_ang_F))
-        self.set_line([(-TOW_CAR_LENGTH/2,0), p], self.big_car_frame_leader,
-                      RGB = (0,0,255), size = 0.03 ,id = 2)#
+        self.viz_mark.update_marker("follow_ref", ((-TOW_CAR_LENGTH/2,0), p))
         # Follower current ang
         p = (0.6*cos(self.theta_F) - TOW_CAR_LENGTH/2.0
             ,0.6*sin(self.theta_F))
-        self.set_line([(-TOW_CAR_LENGTH/2,0), p], self.big_car_frame_leader,
-                      RGB = (102,178,255), size = 0.03 ,id = 3)
+        self.viz_mark.update_marker("follow_cur", ((-TOW_CAR_LENGTH/2,0), p))
         return True # Enable publish
 
     def saturation(self, value, maximum):
@@ -392,64 +395,6 @@ class Rap_controller():
         finally:
             return value
 
-    def get_tf(self,frame_id, child_frame_id):
-        '''
-        get tf frame_id -> child_frame_id
-        Arguments:
-            frame_id(str): e.g: "map", "odom"
-            child_frame_id(str): e.g: "base_link"
-        Return:
-            (x,y,theta)
-            None, if tf is unvaliable
-        '''
-        try:
-            t = self.tfBuffer.lookup_transform(frame_id,
-                                               child_frame_id,
-                                               rospy.Time(),
-                                               rospy.Duration(0.1))
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-            rospy.logwarn("[rap_controller] Can't get tf frame: " + frame_id + " -> " + child_frame_id)
-            return None
-        else:
-            quaternion = (
-                t.transform.rotation.x,
-                t.transform.rotation.y,
-                t.transform.rotation.z,
-                t.transform.rotation.w)
-            euler = tf.transformations.euler_from_quaternion(quaternion)
-            return (t.transform.translation.x, t.transform.translation.y, euler[2])
-
-    def set_line(self, points,frame_id, RGB = (255,0.0) , size = 0.2, id = 0):
-        '''
-        Set line at MarkArray
-        Input : 
-            points = [p1,p2....]
-            RGB - tuple : (255,255,255)
-            size - float: width of line
-            id - int
-        '''
-        marker = Marker()
-        marker.header.frame_id = frame_id
-        marker.id = id
-        marker.ns = "tiles"
-        marker.header.stamp = rospy.get_rostime()
-        marker.type = marker.LINE_STRIP
-        marker.action = marker.ADD
-        marker.scale.x = size
-        marker.scale.y = size
-        marker.scale.z = size
-        marker.color.a = 1.0
-        marker.color.r = RGB[0]/255.0
-        marker.color.g = RGB[1]/255.0
-        marker.color.b = RGB[2]/255.0
-        marker.pose.orientation.w = 1.0
-        for i in points:
-            p = Point()
-            p.x = i[0]
-            p.y = i[1]
-            marker.points.append(p)
-        self.marker_line.markers.append(marker)
-
     def publish(self):
         '''
         Publish topics
@@ -470,52 +415,13 @@ class Rap_controller():
         self.pub_cmd_vel_follow.publish(cmd_vel)
         
         # Publish marker, for debug
-        self.pub_marker_line.publish(self.marker_line)
+        self.viz_mark.publish()\
+        # self.pub_markers.publish(self.viz_mark.marker_array)
         
         # Debug print
         rospy.logdebug("Leader" + " : V=" + str(round(self.v_out_L, 3))+
                                    ", W=" + str(round(self.w_out_L, 3)))
-        
-        # Reset markers
-        self.marker_line = MarkerArray()
 
-#######################
-### Global function ###
-#######################
-def normalize_angle(angle):
-    '''
-    Make angle inside range [-pi, pi]
-    Arguments:
-        angle - flaot
-    Return:
-        float
-    '''
-    ans = (abs(angle) % (2*pi))*sign(angle)
-    if ans < -pi: # [-2pi, -pi]
-        ans += 2*pi
-    elif ans > pi: # [pi, 2pi]
-        ans -= 2*pi
-    return ans
-
-def sign(value):
-    if value >= 0:
-        return 1 
-    if value < 0:
-        return -1
-
-def is_same_sign(a, b):
-    '''
-    Check whether a,b are same sign 
-    arguments:
-        a - float/int
-        b - float/int
-    Return: 
-        Bool - True means a,b have same sign, False means they don't
-    '''
-    if (a >= 0 and b >= 0) or (a < 0 and b < 0):
-        return True
-    else:
-        return False
 
 if __name__ == '__main__':
     rospy.init_node('rap_controller',anonymous=False)
