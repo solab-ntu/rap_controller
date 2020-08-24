@@ -3,7 +3,7 @@ import rospy
 import sys
 import tf2_ros
 import tf # conversion euler
-from math import atan2,acos,sqrt,pi,sin,cos,tan
+from math import atan2,acos,sqrt,pi,sin,cos,tans
 from std_msgs.msg import Float64
 from visualization_msgs.msg import Marker, MarkerArray # Debug drawing
 from geometry_msgs.msg import Point, Twist, PoseStamped
@@ -54,14 +54,11 @@ class Rap_planner():
         # Init RVIZ markers
         self.viz_marker.register_marker("local_goal", 2, 
                                          BIG_CAR_FRAME, (0,255,255), 0.1)
-        self.viz_marker.register_marker("goal_head", 4,
-                                        BIG_CAR_FRAME, (255,255,255), 0.02)
-        # self.viz_marker.register_marker("circle_diff", 4,
-        #                                 BIG_CAR_FRAME, (255,255,0), 0.02)
-        # self.viz_marker.register_marker("circle_crab", 4,
-        #                                 BIG_CAR_FRAME, (255,0,0), 0.02)
+        # self.viz_marker.register_marker("goal_head", 4,
+        #                                 BIG_CAR_FRAME, (255,255,255), 0.02)
         self.viz_marker.register_marker("mode_text", 9,
                                          BIG_CAR_FRAME, (0,0,0),  0.2)
+        # Circle ARC
         self.viz_marker.register_marker("a1_diff", 4, BIG_CAR_FRAME, (255,255,0), 0.02)
         self.viz_marker.register_marker("a2_diff", 4, BIG_CAR_FRAME, (255,255,0), 0.02)
         self.viz_marker.register_marker("a1_crab", 4, BIG_CAR_FRAME, (255,0,0), 0.02)
@@ -74,8 +71,6 @@ class Rap_planner():
                     angle_range = (-pi/2 - ASIDE_GOAL_ANG/2, -pi/2 + ASIDE_GOAL_ANG/2))
         self.viz_marker.update_marker("a2_crab", (0,0), radius = LOOK_AHEAD_DIST,
                     angle_range = ( pi/2 - ASIDE_GOAL_ANG/2,  pi/2 + ASIDE_GOAL_ANG/2))
-        # Init marker circle
-        # self.point_list = [["diff",[(LOOK_AHEAD_DIST,0)]]] # [[["crab",(x,y),...]],[],[],...]
 
     def goal_cb(self, data):
         '''
@@ -228,19 +223,21 @@ class Rap_planner():
         if self.big_car_xyt == None or self.global_path == None:
             return False
         # Find point on global_path that nearest to base_link
+        saddle_count = 0 # Don't search the whole path
         min_d_dist = float("inf")
         prune_point = None
-        try:
-            for idx in range(len(self.global_path.poses)):
-                dx = self.global_path.poses[idx].pose.position.x - self.big_car_xyt[0]
-                dy = self.global_path.poses[idx].pose.position.y - self.big_car_xyt[1]
-                d_dist = dx**2 + dy**2
-                if d_dist < min_d_dist:
-                    prune_point = idx# (pose.pose.position.x, pose.pose.position.y)
-                    min_d_dist = d_dist
-        except IndexError:
-            print (self.global_path.poses)
-            return False
+        for idx in range(len(self.global_path.poses)):
+            dx = self.global_path.poses[idx].pose.position.x - self.big_car_xyt[0]
+            dy = self.global_path.poses[idx].pose.position.y - self.big_car_xyt[1]
+            d_dist = dx**2 + dy**2
+            if d_dist < min_d_dist:
+                prune_point = idx# (pose.pose.position.x, pose.pose.position.y)
+                min_d_dist = d_dist
+                saddle_count = 0
+            else:
+                if saddle_count > 10:
+                    break
+                saddle_count += 1
         self.global_path.poses = self.global_path.poses[prune_point:]
 
 
@@ -373,10 +370,8 @@ class Rap_planner():
         # self.angle = pursu_angle
 
         self.viz_marker.update_marker("local_goal", (x_goal, y_goal) )
-        p = (cos(alpha)*LOOK_AHEAD_DIST, sin(alpha)*LOOK_AHEAD_DIST)
-        self.viz_marker.update_marker("goal_head", ((0,0), p))
-        # self.viz_marker.update_marker("circle_diff")
-        # self.viz_marker.update_marker("circle_crab")
+        # p = (cos(alpha)*LOOK_AHEAD_DIST, sin(alpha)*LOOK_AHEAD_DIST)
+        # self.viz_marker.update_marker("goal_head", ((0,0), p))
 
         ##################
         ###  Get Flags ###
@@ -508,7 +503,7 @@ class Rap_planner():
             text = self.mode
         self.viz_marker.update_marker("mode_text", (0,-0.5), text)
 
-        # Latch count 
+        # Latch counts
         if self.mode_latch_counter > 0:
             self.mode_latch_counter -= 1
 
@@ -569,11 +564,14 @@ if __name__ == '__main__':
     rate = rospy.Rate(CONTROL_FREQ)
     while not rospy.is_shutdown():
         # Set naive cmd
-        if rap_planner.run_once():
-            # Publish rap_cmd to rap_controller
-            rap_planner.publish()
-            RAP_CTL.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
-                            rap_planner.wz_out, rap_planner.mode)
-        if RAP_CTL.run_once():
-            RAP_CTL.publish()
+        try:
+            if rap_planner.run_once():
+                # Publish rap_cmd to rap_controller
+                rap_planner.publish()
+                RAP_CTL.set_cmd(rap_planner.vx_out, rap_planner.vy_out,
+                                rap_planner.wz_out, rap_planner.mode)
+            if RAP_CTL.run_once():
+                RAP_CTL.publish()
+        except Exception as e:
+            rospy.logerror(e)
         rate.sleep()
