@@ -17,6 +17,7 @@ V_MAX = 0.3 # m/s, Max velocity
 W_MAX = 0.8 # rad/s, MAX angular velocity
 KP_crab = 0.8 # KP for crab mode, the bigger the value, the faster it will chase ref_ang
 KP_diff = 1.5 # KP fro diff mode
+KP_rota_abs = 5.0
 KI = 0
 
 # If Radius small then this value, switch to rota controller
@@ -24,6 +25,9 @@ INPLACE_ROTATION_R = 0.1  # meter
 # How precise transition it needs to be.
 TRANSITION_ANG_TOLERANCE = 10 # degree
 TRANSITION_ANG_TOLERANCE *= pi/180.0
+
+ROTA_ABS_TOLERANCE = 5 # degree
+ROTA_ABS_TOLERANCE *= pi/180.0
 # Crab dead zone, car1, car2 heading can't go here
 DEAD_ZONE_ANG = pi/2
 
@@ -185,8 +189,13 @@ class Rap_controller():
         '''
         Inplace rotation controller
         '''
-        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
-        w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        if abs(error) > ROTA_ABS_TOLERANCE/2:
+            # ABS
+            v_con = 0.0 #  (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
+            w_con = self.pi_controller(KP_rota_abs, KI, error)
+        else:
+            v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
+            w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         if ref_ang < 0: # ref_ang == -pi/2
             v_con = -v_con
         return (v_con, w_con)
@@ -415,8 +424,7 @@ class Rap_controller():
         self.pub_cmd_vel_follow.publish(cmd_vel)
         
         # Publish marker, for debug
-        self.viz_mark.publish()\
-        # self.pub_markers.publish(self.viz_mark.marker_array)
+        self.viz_mark.publish()
         
         # Debug print
         rospy.logdebug("Leader" + " : V=" + str(round(self.v_out_L, 3))+

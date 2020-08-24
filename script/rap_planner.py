@@ -477,7 +477,7 @@ class Rap_planner():
         elif self.mode == "rota" or (self.mode == "tran" and self.next_mode == "rota"):
             self.vx_out = 0.0
             self.vy_out = 0.0
-            self.wz_out = ROTA_ANGULAR_VEL*sign(d_head)
+            self.wz_out =sign(d_head) * ROTA_KP_VEL
         elif self.mode == "diff" or (self.mode == "tran" and self.next_mode == "diff"):
             # Get R
             if self.rho < LOOK_AHEAD_DIST:
@@ -524,11 +524,11 @@ if __name__ == '__main__':
     # Kinematic
     CRAB_KP_VEL = rospy.get_param(param_name="~crab_kp_vel", default="1")
     DIFF_KP_VEL = rospy.get_param(param_name="~diff_kp_vel", default="2")
+    ROTA_KP_VEL = rospy.get_param(param_name="~rota_kp_vel", default="0.2") # radian/s
     LOOK_AHEAD_DIST = rospy.get_param(param_name="~look_ahead_dist", default="0.8")
     GOAL_TOLERANCE_XY = rospy.get_param(param_name="~goal_tolerance_xy", default="0.1")
     GOAL_TOLERANCE_T  = rospy.get_param(param_name="~goal_tolerance_t", default="10")*pi/180
     ASIDE_GOAL_ANG = rospy.get_param(param_name="~aside_goal_ang", default="60")*pi/180 # Degree
-    ROTA_ANGULAR_VEL = rospy.get_param(param_name="~rota_angular_vel", default="0.2") # radian/s
 
     # System
     CONTROL_FREQ  = rospy.get_param(param_name="~ctl_frequency", default="10")
