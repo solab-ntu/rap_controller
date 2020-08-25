@@ -15,6 +15,7 @@ def cb_joy(data):
     '''
     Call back function of /joy
     '''
+    global MODE
     if abs(data.axes[SPEED_AXE]) > 0.1:
         global VX_MAX
         VX_MAX = abs(VX_MAX*(data.axes[SPEED_AXE] + 0.1))  # increase speed by 10%
@@ -23,17 +24,22 @@ def cb_joy(data):
         global WZ_MAX
         WZ_MAX = abs(WZ_MAX*(data.axes[TURN_AXE] + 0.1))  # increase turn by 10%
         rospy.loginfo("current max angular speed: %f", WZ_MAX)
-    elif data.buttons[SWITCH_MODE_BUTTON] == 1.0:
-        global MODE
+    
+    # Mode Switch
+    if data.buttons[SWITCH_MODE_BUTTON] == 1.0:
         if MODE == "crab":
             rospy.loginfo("Switch to diff mode")
             MODE = "diff"
         elif MODE == "diff":
-            rospy.loginfo("Switch to rota mode")
-            MODE = "rota"
-        elif MODE == "rota":
             rospy.loginfo("Switch to crab mode")
             MODE = "crab"
+    if data.buttons[TRANSITION_MODE_BUTTON] == 1.0:
+        if MODE == "XX->rota":
+            rospy.loginfo("Switch to rota mode")
+            MODE = "rota"
+        else:
+            rospy.loginfo("Switch to XX->rota mode")
+            MODE = "XX->rota"
 
     else:
         global VX_LAST
@@ -56,7 +62,8 @@ def cb_joy(data):
                 twist.angular.y = 0.0
             elif MODE == "rota":
                 twist.angular.y = 2.0
-            
+            elif MODE == "XX->rota":
+                twist.angular.y = 3.0
             # Don't send -0.0
             if twist.linear.x == 0.0:
                 twist.linear.x = 0.0
@@ -89,6 +96,7 @@ if __name__ == '__main__':
         SPEED_AXE = 5
         TURN_AXE  = 4
         SWITCH_MODE_BUTTON = 1
+        TRANSITION_MODE_BUTTON = 3
 
     VX_MAX = rospy.get_param(param_name="~vx_max")
     VY_MAX = rospy.get_param(param_name="~vy_max")

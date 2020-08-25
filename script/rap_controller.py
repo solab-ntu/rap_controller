@@ -127,6 +127,9 @@ class Rap_controller():
             self.set_cmd(data.linear.x, 0.0, data.angular.z, "diff")
         elif data.angular.y == 2.0: # Rota mode
             self.set_cmd(0.0, 0.0, data.angular.z, "rota")
+        elif data.angular.y == 3.0: # XX->Rota mode
+            self.next_mode = "rota"
+            self.set_cmd(0.0, 0.0, 0.1, "tran")
     def set_cmd(self, vx, vy, wz, mode):
         '''
         Set cmd come from rap_planner
@@ -209,10 +212,10 @@ class Rap_controller():
         WHEEL_SEPERATE_L = 0.33
         if inner_side == "left":
             v_left  = -self.pi_controller(10, KI, error)
-            v_right = (TOW_CAR_LENGTH/2.0 + WHEEL_SEPERATE_L/2.0)*wz # *abs(cos(error))
+            v_right = (TOW_CAR_LENGTH/2.0 + WHEEL_SEPERATE_L/2.0)*wz*10 # *abs(cos(error))
             
         elif inner_side == "right":
-            v_left  = -(TOW_CAR_LENGTH/2.0 + WHEEL_SEPERATE_L/2.0)*wz # *abs(cos(error))
+            v_left  = -(TOW_CAR_LENGTH/2.0 + WHEEL_SEPERATE_L/2.0)*wz*10 # *abs(cos(error))
             v_right =  self.pi_controller(10, KI, error)
             rospy.loginfo("error = " + str(error))
             rospy.loginfo("v_left = " + str(v_left) + ", v_right = " + str(v_right))
