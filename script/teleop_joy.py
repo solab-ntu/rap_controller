@@ -29,6 +29,9 @@ def cb_joy(data):
             rospy.loginfo("Switch to diff mode")
             MODE = "diff"
         elif MODE == "diff":
+            rospy.loginfo("Switch to rota mode")
+            MODE = "rota"
+        elif MODE == "rota":
             rospy.loginfo("Switch to crab mode")
             MODE = "crab"
 
@@ -51,6 +54,8 @@ def cb_joy(data):
                 twist.angular.y = 1.0
             elif MODE == "diff":
                 twist.angular.y = 0.0
+            elif MODE == "rota":
+                twist.angular.y = 2.0
             
             # Don't send -0.0
             if twist.linear.x == 0.0:
