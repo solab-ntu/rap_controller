@@ -190,15 +190,41 @@ class Rap_controller():
         '''
         Inplace rotation controller
         '''
+        '''
         if abs(error) > ROTA_ABS_TOLERANCE/2:
             # ABS
             v_con = 0.0 #  (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
             w_con = self.pi_controller(KP_rota_abs, KI, error)
         else:
-            v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
-            w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        '''
+        v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
+        w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
         if ref_ang < 0: # ref_ang == -pi/2
             v_con = -v_con
+        return (v_con, w_con)
+
+    def rota_controller_test(self,wz,error,ref_ang, inner_side):
+        WHEEL_RADIUS =  0.075  
+        WHEEL_SEPERATE_L = 0.33
+        if inner_side == "left":
+            v_left  = -self.pi_controller(10, KI, error)
+            v_right = (TOW_CAR_LENGTH/2.0 + WHEEL_SEPERATE_L/2.0)*wz # *abs(cos(error))
+            
+        elif inner_side == "right":
+            v_left  = -(TOW_CAR_LENGTH/2.0 + WHEEL_SEPERATE_L/2.0)*wz # *abs(cos(error))
+            v_right =  self.pi_controller(10, KI, error)
+            rospy.loginfo("error = " + str(error))
+            rospy.loginfo("v_left = " + str(v_left) + ", v_right = " + str(v_right))
+        
+        #if ref_ang < 0: # ref_ang == -pi/2
+        #    v_left = -v_left
+        
+        v_con = WHEEL_RADIUS*(v_left + v_right)/2.0
+        w_con = WHEEL_RADIUS*(v_right - v_left)/WHEEL_SEPERATE_L
+
+        if inner_side == "right":
+            v_con = -v_con
+
         return (v_con, w_con)
 
     def get_radius_of_rotation(self,v,w):
@@ -341,10 +367,14 @@ class Rap_controller():
             (self.v_out_F, self.w_out_F) =  self.crab_controller(
                                             self.Vx, self.Vy, error_theta_F, is_forward)
         elif self.mode == "rota":
-            (self.v_out_L, self.w_out_L) =  self.rota_controller(
-                                            self.Wz,error_theta_L, ref_ang_L)
-            (self.v_out_F, self.w_out_F) =  self.rota_controller(
-                                            self.Wz,error_theta_F, ref_ang_F)
+            # (self.v_out_L, self.w_out_L) =  self.rota_controller(
+            #                                 self.Wz,error_theta_L, ref_ang_L)
+            # (self.v_out_F, self.w_out_F) =  self.rota_controller(
+            #                                 self.Wz,error_theta_F, ref_ang_F)
+            (self.v_out_L, self.w_out_L) =  self.rota_controller_test(
+                                            self.Wz,error_theta_L, ref_ang_L, "left")
+            (self.v_out_F, self.w_out_F) =  self.rota_controller_test(
+                                            self.Wz,error_theta_F, ref_ang_F, "right")
         elif self.mode == "tran":
             if abs(error_theta_L) > (TRANSITION_ANG_TOLERANCE/2.0) or\
                abs(error_theta_F) > (TRANSITION_ANG_TOLERANCE/2.0):
