@@ -194,15 +194,46 @@ class Rap_controller():
         '''
         Inplace rotation controller
         '''
-        '''
+
+        ''' stupid 
         if abs(error) > ROTA_ABS_TOLERANCE/2:
             # ABS
             v_con = 0.0 #  (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
             w_con = self.pi_controller(KP_rota_abs, KI, error)
         else:
         '''
+        #v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
+        #w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        '''
+        WHEEL_RADIUS =  0.075
+        WHEEL_SEPERATE_L = 0.33
+        VEL_TOLERANCE = 0.3        
+        v_left  = (v_con - w_con * WHEEL_SEPERATE_L / 2.0) / WHEEL_RADIUS
+        v_right = (v_con + w_con * WHEEL_SEPERATE_L / 2.0) / WHEEL_RADIUS
+        if (abs(v_left) < VEL_TOLERANCE or abs(v_right) < VEL_TOLERANCE ) and wz != 0:
+            print ("BOOST!!!")
+            rospy.loginfo("v_left = " + str(v_left) + ", v_right = " + str(v_right))
+            v_con = 0
+            w_con = self.pi_controller(5, KI, error)
+
+        # rospy.loginfo("v_left = " + str(v_left) + ", v_right = " + str(v_right))
+        '''
+        # Better than original 
+        ERROR_LIMIT = pi/18.0
+        percentage = abs(error) / ERROR_LIMIT
+        if percentage >= 1.0:
+            v_con = 0
+            w_con = self.pi_controller(KP_diff, KI, error) * percentage
+            print (str(percentage))
+        else:
+            v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error)) * (1-percentage)
+            w_con = wz*abs(cos(error)) * (1-percentage) + self.pi_controller(KP_diff, KI, error)
+        
+
+        ''' Original 
         v_con = (TOW_CAR_LENGTH/2.0)*wz*abs(cos(error))
         w_con = wz*abs(cos(error)) + self.pi_controller(KP_diff, KI, error)
+        '''
         if ref_ang < 0: # ref_ang == -pi/2
             v_con = -v_con
         return (v_con, w_con)
