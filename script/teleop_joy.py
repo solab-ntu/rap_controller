@@ -30,7 +30,7 @@ def cb_joy(data):
         if MODE == "crab":
             rospy.loginfo("Switch to diff mode")
             MODE = "diff"
-        elif MODE == "diff":
+        else:  # MODE == "diff":
             rospy.loginfo("Switch to crab mode")
             MODE = "crab"
     if data.buttons[TRANSITION_MODE_BUTTON] == 1.0:

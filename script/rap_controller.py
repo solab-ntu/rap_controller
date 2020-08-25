@@ -207,6 +207,7 @@ class Rap_controller():
             v_con = -v_con
         return (v_con, w_con)
 
+    '''
     def rota_controller_test(self,wz,error,ref_ang, inner_side):
         WHEEL_RADIUS =  0.075  
         WHEEL_SEPERATE_L = 0.33
@@ -230,7 +231,7 @@ class Rap_controller():
             v_con = -v_con
 
         return (v_con, w_con)
-
+    '''
     def get_radius_of_rotation(self,v,w):
         try:
             radius = v / w
@@ -371,14 +372,14 @@ class Rap_controller():
             (self.v_out_F, self.w_out_F) =  self.crab_controller(
                                             self.Vx, self.Vy, error_theta_F, is_forward)
         elif self.mode == "rota":
-            # (self.v_out_L, self.w_out_L) =  self.rota_controller(
-            #                                 self.Wz,error_theta_L, ref_ang_L)
-            # (self.v_out_F, self.w_out_F) =  self.rota_controller(
-            #                                 self.Wz,error_theta_F, ref_ang_F)
-            (self.v_out_L, self.w_out_L) =  self.rota_controller_test(
-                                            self.Wz,error_theta_L, ref_ang_L, "left")
-            (self.v_out_F, self.w_out_F) =  self.rota_controller_test(
-                                            self.Wz,error_theta_F, ref_ang_F, "right")
+            (self.v_out_L, self.w_out_L) =  self.rota_controller(
+                                            self.Wz,error_theta_L, ref_ang_L)
+            (self.v_out_F, self.w_out_F) =  self.rota_controller(
+                                            self.Wz,error_theta_F, ref_ang_F)
+            # (self.v_out_L, self.w_out_L) =  self.rota_controller_test(
+            #                                 self.Wz,error_theta_L, ref_ang_L, "left")
+            # (self.v_out_F, self.w_out_F) =  self.rota_controller_test(
+            #                                 self.Wz,error_theta_F, ref_ang_F, "right")
         elif self.mode == "tran":
             if abs(error_theta_L) > (TRANSITION_ANG_TOLERANCE/2.0) or\
                abs(error_theta_F) > (TRANSITION_ANG_TOLERANCE/2.0):
