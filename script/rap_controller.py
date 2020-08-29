@@ -70,12 +70,16 @@ class Rap_controller():
         # Parameters
         self.dt = 1.0 / self.control_freq
         # Tf listner
+        '''
         self.tfBuffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tfBuffer)
         self.base_link_xyt_L = None # (x,y,theta)
         self.base_link_xyt_F = None # (x,y,theta)
         self.big_car_xyt_L = None  # (x,y,theta)
         self.big_car_xyt_F = None  # (x,y,theta)
+        '''
+        rospy.Subscriber("/car1/theta", Float64, self.theta_car1_cb)
+        rospy.Subscriber("/car2/theta", Float64, self.theta_car2_cb)
         self.theta_L = None
         self.theta_F = None
         # Kinematics 
@@ -107,6 +111,17 @@ class Rap_controller():
                                       RGB = (0,0,255), size = 0.03)
         self.viz_mark.register_marker("follow_cur", 4, self.big_car_frame_leader,
                                       RGB = (102,178,255), size = 0.03)
+    
+    def theta_car1_cb(self, data):
+        '''
+        '''
+        self.theta_L = data.data
+
+    def theta_car2_cb(self, data):
+        '''
+        '''
+        self.theta_F = data.data
+    
     def cmd_cb(self,data):
         '''
         Topic /<robot_name>/cmd_vel callback function
@@ -130,6 +145,7 @@ class Rap_controller():
         elif data.angular.y == 3.0: # XX->Rota mode
             self.next_mode = "rota"
             self.set_cmd(0.0, 0.0, 0.1, "tran")
+    
     def set_cmd(self, vx, vy, wz, mode):
         '''
         Set cmd come from rap_planner
@@ -342,6 +358,7 @@ class Rap_controller():
             True - Calculate successfully, need publish
             False - Can't finish calculation, don't publish
         '''
+        '''
         # Update tf
         t_base_link_L = get_tf(self.tfBuffer, self.map_frame, self.base_link_frame_leader)
         t_base_link_F = get_tf(self.tfBuffer, self.map_peer_frame, self.base_link_frame_follow)
@@ -361,12 +378,19 @@ class Rap_controller():
             self.base_link_xyt_F == None or self.big_car_xyt_F == None: #tf is invalid
             time.sleep(1)
             return False
-        
+        '''
+        # Use theta Instead of /tf # TODO need test
+        if self.theta_L == None or self.theta_F == None:
+            rospy.logwarn("[rap_controller] Can't get /car1/theta or /car2/theta")
+            time.sleep(1)
+            return False
         # Get current theta
+        '''
         self.theta_L = normalize_angle(normalize_angle(self.base_link_xyt_L[2])
                                      - normalize_angle(self.big_car_xyt_L[2]))
         self.theta_F = normalize_angle(normalize_angle(self.base_link_xyt_F[2])
                                      - normalize_angle(self.big_car_xyt_F[2]))
+        '''
         #########################
         #### Get Errror angle ###
         #########################

@@ -310,7 +310,7 @@ class Rap_planner():
         if self.simple_goal == None:
             return False
         
-        # Update tf
+        # Update tf # TODO use odom_fuse result
         t_big_car   = get_tf(self.tfBuffer, MAP_FRAME, BIG_CAR_FRAME)
         if t_big_car != None:
             self.big_car_xyt = t_big_car
