@@ -7,7 +7,7 @@ from math import atan2,acos,sqrt,pi,sin,cos,tan
 from std_msgs.msg import Float64
 from geometry_msgs.msg import Point, Twist# topic /cmd_vel
 from lucky_utility.ros.rospy_utility import get_tf,normalize_angle,\
-                                            sign,is_same_sign, Marker_Manager
+                                            sign,is_same_sign, Marker_Manager, send_tf
 from visualization_msgs.msg import MarkerArray
 import time # for testing
 #########################
@@ -121,6 +121,7 @@ class Rap_controller():
         '''
         '''
         self.theta_F = data.data
+        send_tf((-TOW_CAR_LENGTH/2.0, 0, data.data) ,"carB/base_link", "car2/base_link")
     
     def cmd_cb(self,data):
         '''
