@@ -103,13 +103,13 @@ class Rap_controller():
         # Markers
         self.viz_mark = Marker_Manager("/rap_controller/markers")
         
-        self.viz_mark.register_marker("leader_ref", 4, self.big_car_frame_leader,
+        self.viz_mark.register_marker("leader_ref", 4, "/carB/base_link",# self.big_car_frame_leader,
                                       RGB = (0,0,255), size = 0.03)
-        self.viz_mark.register_marker("leader_cur", 4, self.base_link_frame_leader,
+        self.viz_mark.register_marker("leader_cur", 4, "/car1/base_link",# self.base_link_frame_leader,
                                       RGB = (102,178,255), size = 0.03)
-        self.viz_mark.register_marker("follow_ref", 4, self.big_car_frame_leader,
+        self.viz_mark.register_marker("follow_ref", 4, "/carB/base_link",# self.big_car_frame_leader,
                                       RGB = (0,0,255), size = 0.03)
-        self.viz_mark.register_marker("follow_cur", 4, self.big_car_frame_leader,
+        self.viz_mark.register_marker("follow_cur", 4, "/carB/base_link",# self.big_car_frame_leader,
                                       RGB = (102,178,255), size = 0.03)
     
     def theta_car1_cb(self, data):
